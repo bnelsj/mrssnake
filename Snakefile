@@ -44,13 +44,21 @@ def get_region_from_contig_and_num(chr, num):
     end = min(start + WINDOW_SIZE, contig_length - 1)
     return "%s:%d-%d" % (chr, start, end)
 
-def get_bam_from_sample(wildcards):
-    return SAMPLES[wildcards.sample]
-
-localrules: all
+localrules: all, run_tests
 
 rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
+
+rule run_tests:
+    input: expand("fixed_output.pkl")
+
+rule run_old:
+    input: "fixed_output.sam"
+    output: "fixed_output.pkl"
+    params: sge_opts = "-l mfree=20G"
+    benchmark: "benchmarks/mrsfast_counter.json"
+    shell:
+        "python mrsfast_simple_mapper.py {input} {output} {CONTIGS_FILE}"
 
 rule get_wssd_out_file:
     input: expand("chr_matrices/{{sample}}.{chr}.pkl", chr = CONTIGS.keys())
