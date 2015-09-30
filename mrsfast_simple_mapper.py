@@ -1,3 +1,10 @@
+from __future__ import print_function
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
 import sys
 import argparse
 
@@ -5,7 +12,7 @@ import pysam
 import numpy as np
 
 from scipy.sparse import lil_matrix
-import cPickle as pickle
+
 
 def get_edist(read):
     return read.get_tag("NM")
@@ -16,6 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("outfile", default="wssd_out_file")
     parser.add_argument("contig_lengths", help="tab-delimited file with contig names and lengths")
     parser.add_argument("--max_edist", default = 2, type = int, help = "Maximum edit distance of input reads")
+    parser.add_argument("--common_contigs", default = [], nargs="+", help = "Create numpy array for common contigs (Much faster, more memory)")
 
     args = parser.parse_args()
 
@@ -40,26 +48,38 @@ if __name__ == "__main__":
         end = read.qend
         if contig not in read_dict:
             length = contigs[contig]
-            read_dict[contig] = np.zeros((nrows, length), dtype=np.int)
+            if contig in args.common_contigs:
+                read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
+                sys.stdout.write(contig + "(%s, %s) numpy array\n" % (nrows, length))
+            else:
+                read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
+                sys.stdout.write(contig + " scipy lil_matrix\n")
 
         edist = get_edist(read)
 
-        # Update read depth counts
-        read_dict[contig][edist + nstart_rows, start:end+1] += 1
+        if contig in args.common_contigs:
+            # Update read depth counts for numpy array
+            read_dict[contig][edist + nstart_rows, start:end+1] += 1
+        else:
+            # Update read depth counts for sparse matrix
+            slice = read_dict[contig][edist + nstart_rows, start:end+1].toarray()
+            slice += 1
+            read_dict[contig][:, start:end+1] = slice
  
         # Update read start counts
         read_dict[contig][edist, start] += 1
 
         if i % 100000 == 0:
-            print "%d reads processed" % i
+            sys.stdout.write("%d reads processed\n" % i)
+            sys.stdout.flush()
 
     samfile.close()
 
-    out_dict = {}
 
-    for contig, array in read_dict.iteritems():
-        out_dict[contig] = lil_matrix(array)
-        del(array)
+    for contig, array in read_dict.items():
+        if contig in args.common_contigs:
+            read_dict[contig] = lil_matrix(array)
+            del(array)
 
     with open(args.outfile, "wb") as outfile:
-        pickle.dump(out_dict, outfile, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(read_dict, outfile, pickle.HIGHEST_PROTOCOL)

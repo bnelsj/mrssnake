@@ -50,15 +50,23 @@ rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
 
 rule run_tests:
-    input: expand("fixed_output.pkl")
+    input: "fixed_output.pkl", "fixed_output.hybrid.pkl"
 
-rule run_old:
+rule mrsfast_counter_hybrid:
+    input: "fixed_output.sam"
+    output: "fixed_output.hybrid.pkl"
+    params: sge_opts = "-l mfree=40G"
+    benchmark: "benchmarks/mrsfast_counter_hybrid.json"
+    shell:
+        "python3 mrsfast_simple_mapper.hybrid.py {input} {output} {CONTIGS_FILE} --common_contigs chr20"
+
+rule mrsfast_counter:
     input: "fixed_output.sam"
     output: "fixed_output.pkl"
-    params: sge_opts = "-l mfree=20G"
+    params: sge_opts = "-l mfree=40G"
     benchmark: "benchmarks/mrsfast_counter.json"
     shell:
-        "python mrsfast_simple_mapper.py {input} {output} {CONTIGS_FILE}"
+        "python3 mrsfast_simple_mapper.py {input} {output} {CONTIGS_FILE}"
 
 rule get_wssd_out_file:
     input: expand("chr_matrices/{{sample}}.{chr}.pkl", chr = CONTIGS.keys())
@@ -84,5 +92,5 @@ rule map_and_count:
             "samtools view -h {region_string} {input} | "
             "samtools bam2fq -n - | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o /dev/stdout | "
-            "python mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE}"
+            "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE}"
             )
