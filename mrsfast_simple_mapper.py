@@ -27,7 +27,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    
     contigs = {}
 
     with open(args.contig_lengths, "r") as reader:
@@ -74,7 +73,6 @@ if __name__ == "__main__":
             sys.stdout.flush()
 
     samfile.close()
-
 
     for contig, array in read_dict.items():
         if contig in args.common_contigs:
