@@ -7,18 +7,25 @@ except ImportError:
     import pickle
 
 import argparse
+import tables
+import numpy as np
 from scipy.sparse import lil_matrix
 
-def sum_counts(new_counts, old_counts):
-    for contig, matrix in new_counts.items():
-        if contig not in old_counts:
-            old_counts[contig] = matrix
-        else:
-            old_counts[contig] += matrix
-    return old_counts
-
 def write_to_h5(counts, outfile):
-    pass
+    fout = tables.open_file(outfile, mode="w")
+    group = fout.create_group(fout.root, "depthAndStarts_wssd")
+
+    for contig, matrix in counts:
+        nrows, ncols = matrix.shape
+        nedists = nrows // 2
+        carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (nedists, ncols), filters=tables.Filters(complevel=1, complib="lzo"))
+
+        wssd_contig = [np.reshape(matrix[:, i], (2, nedists)) for i in range(ncols)]
+
+        carray_empty[:, :, :] = wssd_contig
+        del(wssd_contig)
+
+    fout.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -32,4 +39,10 @@ if __name__ == "__main__":
     for infile in args.infiles:
         with open(infile, "r") as file:
             dat = pickle.load(file)
-            old_counts = sum_counts(dat, contigs)
+
+            for contig, matrix in dat.items():
+                if contig not in contigs:
+                    contigs[contig] = matrix
+                else:
+                    contigs[contig] += matrix
+                del(matrix)
