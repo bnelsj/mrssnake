@@ -85,12 +85,14 @@ rule merge_sparse_matrices:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}.{chr}.{num}.pkl"
-    params: sge_opts = "-l mfree=40G"
+    params: sge_opts = "-l mfree=40G", chr = "{chr}"
     run:
         region_string = get_region_from_contig_and_num(wildcards.chr, wildcards.num)
+        fifo = "$TMPDIR/mrsfast_fifo"
         shell(
-            "samtools view -h {region_string} {input} | "
-            "samtools bam2fq -n - | "
-            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o /dev/stdout | "
-            "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE}"
+            "mkfifo {fifo}; "
+            "samtools view -H {input} > {fifo}; "
+            "python3 chunker.py {input} {chr} {start} {end} | "
+            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} | "
+            "python3 mrsfast_simple_mapper.py {fifo} {output} {CONTIGS_FILE} --common_contigs {params.chr}"
             )
