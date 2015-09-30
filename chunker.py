@@ -15,7 +15,7 @@ def chunk_reads(chr, start, end, bamfile, outfile, chunk_size, dt):
     curr_pos = 0
     for l in bamfile.fetch(chr, start, end):
         n_to_do = l.rlen // chunk_size
-        for k in xrange(n_to_do):
+        for k in range(n_to_do):
             outfile.write("> test\n" + l.seq[k*chunk_size : k*chunk_size + chunk_size] + "\n")
     
     print("FINISHED READING %s:%d-%d" % (chr,start,end))
@@ -28,7 +28,7 @@ def chunk_reads_old(chr, start, end, bamfile, outfile, chunk_size, dt):
     curr_pos = 0
     for l in bamfile.fetch(chr, start, end):
         n_to_do = l.rlen // chunk_size
-        for k in xrange(n_to_do):
+        for k in range(n_to_do):
             reads_block[curr_pos] = l.seq[k*chunk_size: k*chunk_size + chunk_size]
             curr_pos += 1
             if curr_pos == SEND_BLOCK_SIZE: 
