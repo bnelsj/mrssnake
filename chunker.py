@@ -6,20 +6,17 @@ import pysam
 import numpy as np
 
 SEND_BLOCK_SIZE = int(2e6)
-READ_BLOCK_SIZE = int(10e6) ###this ist he basepair chunk
+READ_BLOCK_SIZE = int(10e6) # Chunk size for input
 
 def chunk_reads(chr, start, end, bamfile, outfile, chunk_size, dt):
     """This takes blocks of reads from a bam, then chunks them and sends them to mrsfast
        Code from psudmant's super_mapper.py"""
 
-    curr_pos = 0
     for l in bamfile.fetch(chr, start, end):
         n_to_do = l.rlen // chunk_size
         for k in range(n_to_do):
-            outfile.write("> test\n" + l.seq[k*chunk_size : k*chunk_size + chunk_size] + "\n")
+            outfile.write(">0\n" + l.seq[k*chunk_size : k*chunk_size + chunk_size] + "\n")
     
-    print("FINISHED READING %s:%d-%d" % (chr,start,end))
-
 def chunk_reads_old(chr, start, end, bamfile, outfile, chunk_size, dt):
     """This takes blocks of reads from a bam, then chunks them and sends them to mrsfast
        Code from psudmant's super_mapper.py"""
