@@ -1,4 +1,5 @@
 from __future__ import print_function
+from __future__ import division
 
 try:
     import cPickle as pickle
@@ -39,12 +40,17 @@ if __name__ == "__main__":
 
     read_dict = {}
     nrows = 2 * args.max_edist + 2
-    nstart_rows = nrows / 2
+    nstart_rows = nrows // 2
 
     for i, read in enumerate(samfile):
         contig = samfile.getrname(read.reference_id)
         start = read.qstart
         end = read.qend
+
+        edist = get_edist(read)
+        if edist > args.max_edist:
+            continue
+
         if contig not in read_dict:
             length = contigs[contig]
             if contig in args.common_contigs:
@@ -54,7 +60,6 @@ if __name__ == "__main__":
                 read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
                 sys.stdout.write(contig + " scipy lil_matrix\n")
 
-        edist = get_edist(read)
 
         if contig in args.common_contigs:
             # Update read depth counts for numpy array
