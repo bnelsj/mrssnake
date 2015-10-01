@@ -11,6 +11,8 @@ MANIFEST = config["manifest"]
 MASKED_REF = config["masked_ref"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
+TEMPLATE = config["template"]
+TRIM_CONTIGS = config["trim_contigs"].upper().startswith("Y")
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -70,11 +72,14 @@ rule map_and_count:
     run:
         chr, start, end = get_region_from_contig_and_num(wildcards.chr, wildcards.num)
         fifo = "$TMPDIR/mrsfast_fifo"
-        chr_trimmed = chr.replace("chr", "")
+        if TRIM_CONTIGS:
+            chr_trimmed = chr.replace("chr", "")
+        else:
+            chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
-            "samtools view -H {input} > {fifo}; "
             "python3 chunker.py {input} {chr_trimmed} {start} {end} | "
-            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} | "
-            "python3 mrsfast_simple_mapper.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
+            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
+            "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
+            "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
