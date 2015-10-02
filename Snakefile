@@ -67,7 +67,7 @@ rule merge_sparse_matrices:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}.{chr}.{num}.pkl"
-    params: sge_opts = "-l mfree=10G"
+    params: sge_opts = "-l mfree=6G"
     benchmark: "benchmarks/counter/{sample}.{chr}.{num}.json"
     run:
         chr, start, end = get_region_from_contig_and_num(wildcards.chr, wildcards.num)
