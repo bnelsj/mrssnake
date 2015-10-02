@@ -52,5 +52,4 @@ if __name__ == "__main__":
                     contigs[contig] += matrix
                 del(matrix)
 
-    print("Finished reading infiles\n")
     write_to_h5(contigs, args.outfile)
