@@ -2,7 +2,7 @@
   "manifest": "manifest.txt",
   "masked_ref": "/net/eichler/vol7/home/psudmant/genomes/index_files/mrsfast_hg19/hg19_masked",
   "contigs": "hg19_masked.contigs.txt",
-  "window_size": 500000,
+  "window_size": 5000000,
   "template": "fixed_output.sam",
-  "trim_contigs": "Y"
+  "trim_contigs": "N"
 }
