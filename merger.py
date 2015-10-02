@@ -15,14 +15,19 @@ def write_to_h5(counts, outfile):
     fout = tables.open_file(outfile, mode="w")
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
-    for contig, matrix in counts:
+    for contig, matrix in counts.items():
         nrows, ncols = matrix.shape
         nedists = nrows // 2
-        carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (nedists, ncols), filters=tables.Filters(complevel=1, complib="lzo"))
+        carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
 
-        wssd_contig = [np.reshape(matrix[:, i], (2, nedists)) for i in range(ncols)]
+        wssd_contig = matrix.toarray().T
 
-        carray_empty[:, :, :] = wssd_contig
+        # Add depth counts
+        carray_empty[:, :, 0] = wssd_contig[:, nedists:]
+
+        # Add starts
+        carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
+
         del(wssd_contig)
 
     fout.close()
@@ -37,7 +42,7 @@ if __name__ == "__main__":
     contigs = {}
 
     for infile in args.infiles:
-        with open(infile, "r") as file:
+        with open(infile, "rb") as file:
             dat = pickle.load(file)
 
             for contig, matrix in dat.items():
@@ -46,3 +51,6 @@ if __name__ == "__main__":
                 else:
                     contigs[contig] += matrix
                 del(matrix)
+
+    print("Finished reading infiles\n")
+    write_to_h5(contigs, args.outfile)
