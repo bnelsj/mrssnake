@@ -77,7 +77,7 @@ rule map_and_count:
             chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
-            "python3 chunker.py {input} {chr_trimmed} {start} {end} --fifo {fifo} | "
+            "python3 chunker.py {input} {chr_trimmed} {start} {end} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
