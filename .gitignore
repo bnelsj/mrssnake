@@ -4,3 +4,5 @@ benchmarks/
 *.pkl
 *.sam
 *.fa
+*.fasta
+*.txt
