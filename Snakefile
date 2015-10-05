@@ -1,4 +1,5 @@
 import os
+import pysam
 
 shell.prefix("source config.sh; ")
 
@@ -24,12 +25,6 @@ with open(CONTIGS_FILE, "r") as reader:
         contig, size = line.rstrip().split()
         CONTIGS[contig] = int(size)
 
-REGIONS = []
-
-for contig in CONTIGS.keys():
-    nregions = CONTIGS[contig] // WINDOW_SIZE + 1
-    REGIONS.extend(["%s.%d" % (contig, x) for x in range(nregions)])
-
 SAMPLES = {}
 
 with open(MANIFEST, "r") as reader:
@@ -37,19 +32,21 @@ with open(MANIFEST, "r") as reader:
         sn, bam = line.rstrip().split()
         SAMPLES[sn] = bam
 
+REGIONS = {}
+
+for sample, bam in SAMPLES.items():
+    REGIONS[sample] = []
+
+    header = pysam.view("-H", bam)
+    contigs = {line.split()[1].replace("SN:",""): int(line.split()[2].replace("LN:","")) for line in header if line.startswith("@SQ")}
+
+    for contig, contig_length in contigs.items():
+        nregions = contig_length // WINDOW_SIZE + 1
+        coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
+        REGIONS[sample].extend(["%s.%s" % (contig, x) for x in coords])
+
 def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s.%s.pkl" % (wildcards.sample, region) for region in REGIONS]
-
-def get_region_nums_from_contigs(wildcards):
-    contig_length = CONTIGS[wildcards.chr]
-    nregions = contig_length // WINDOW_SIZE + 1
-    return [str(x) for x in range(nregions)]
-
-def get_region_from_contig_and_num(chr, num):
-    contig_length = CONTIGS[chr]
-    start = int(num) * WINDOW_SIZE
-    end = min(start + WINDOW_SIZE, contig_length - 1)
-    return (chr, str(start), str(end))
+    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in REGIONS[wildcards.sample]]
 
 localrules: all, run_tests
 
@@ -67,11 +64,12 @@ rule merge_sparse_matrices:
 
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
-    output: "region_matrices/{sample}.{chr}.{num}.pkl"
+    output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
     params: sge_opts = "-l mfree=6G"
     benchmark: "benchmarks/counter/{sample}.{chr}.{num}.json"
     run:
-        chr, start, end = get_region_from_contig_and_num(wildcards.chr, wildcards.num)
+        chr = wildcards.chr
+        start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
         if TRIM_CONTIGS:
             chr_trimmed = chr.replace("chr", "")
@@ -79,7 +77,7 @@ rule map_and_count:
             chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
-            "python3 chunker.py {input} {chr_trimmed} {start} {end} | "
+            "python3 chunker.py {input} {chr_trimmed} {start} {end} --fifo {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
