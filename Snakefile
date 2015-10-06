@@ -71,6 +71,7 @@ rule map_and_count_unmapped:
         fifo = "$TMPDIR/mrsfast_fifo"
         shell(
             "mkfifo {fifo}; "
+            'samtools view {input} "*" | '
             "python3 chunker.py {input} unmapped --fifo {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
