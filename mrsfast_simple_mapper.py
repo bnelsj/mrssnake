@@ -15,29 +15,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 
 
-def get_edist(read):
-    return read.get_tag("NM")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("infile", default="/dev/stdin")
-    parser.add_argument("outfile", default="wssd_out_file")
-    parser.add_argument("contig_lengths", help="tab-delimited file with contig names and lengths")
-    parser.add_argument("--max_edist", default = 2, type = int, help = "Maximum edit distance of input reads")
-    parser.add_argument("--common_contigs", default = [], nargs="+", help = "Create numpy array for common contigs (Much faster, more memory)")
-
-    args = parser.parse_args()
-
-    contigs = {}
-
-    with open(args.contig_lengths, "r") as reader:
-        for line in reader:
-            contig, length = line.rstrip().split()
-            #contig = contig.replace("chr", "")
-            contigs[contig] = int(length)
-
-    samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
-
+def count_reads(samfile, contigs, args):
     read_dict = {}
     nrows = 2 * args.max_edist + 2
     nstart_rows = nrows // 2
@@ -47,7 +25,7 @@ if __name__ == "__main__":
         start = read.qstart
         end = read.qend
 
-        edist = get_edist(read)
+        edist = read.get_tag("NM")
         if edist > args.max_edist:
             continue
 
@@ -77,7 +55,43 @@ if __name__ == "__main__":
             sys.stdout.write("%d reads processed\n" % i)
             sys.stdout.flush()
 
-    samfile.close()
+    return read_dict
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("infile", default="/dev/stdin")
+    parser.add_argument("outfile", default="wssd_out_file")
+    parser.add_argument("contig_lengths", help="tab-delimited file with contig names and lengths")
+    parser.add_argument("--max_edist", default = 2, type = int, help = "Maximum edit distance of input reads")
+    parser.add_argument("--common_contigs", default = [], nargs="+", help = "Create numpy array for common contigs (Much faster, more memory)")
+
+    args = parser.parse_args()
+
+    contigs = {}
+
+    with open(args.contig_lengths, "r") as reader:
+        for line in reader:
+            contig, length = line.rstrip().split()
+            #contig = contig.replace("chr", "")
+            contigs[contig] = int(length)
+
+    samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
+
+    try:
+        read_dict = count_reads(samfile, contigs, args)
+    except NotImplementedError:
+        read_dict = {}
+        with open(args.infile, "r") as reader:
+            msg = reader.readline() # This line might be truncated
+            msg = reader.readline()
+            sys.stderr.write("Counter got message: %s" % msg)
+            if msg.startswith("ERROR: no reads"):
+                pass # Write empty pickle
+            else:
+                sys.exit(1)
+    finally:
+        samfile.close()
 
     for contig, array in read_dict.items():
         if contig in args.common_contigs:
