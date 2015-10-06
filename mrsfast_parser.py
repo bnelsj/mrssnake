@@ -1,3 +1,4 @@
+import sys
 import argparse
 import pysam
 
@@ -11,10 +12,20 @@ if __name__ == "__main__":
 
     header = pysam.view("-H", args.template_file)
     with open(args.outfile, "w") as writer:
-        for line in header:
-            writer.write(line)
-
+        
         input = open(args.infile, "r")
-        for line in input:
-            writer.write(line)
+        first = input.readline()
+        if first.startswith("ERROR:"):
+            while True:
+                try:
+                    writer.write(first)
+                except BrokenPipeError:
+                    break
+        else:
+            for line in header:
+                writer.write(line)
+            writer.write(first)
+            for line in input:
+                writer.write(line)
+        sys.stderr.write("Finished parsing input\n")
         input.close()
