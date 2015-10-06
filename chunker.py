@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import division
 
+import sys
 import argparse
 import pysam
 import numpy as np
@@ -8,14 +9,30 @@ import numpy as np
 SEND_BLOCK_SIZE = int(2e6)
 READ_BLOCK_SIZE = int(10e6) # Chunk size for input
 
-def chunk_reads(chr, start, end, bamfile, outfile, chunk_size, dt):
-    """This takes blocks of reads from a bam, then chunks them and sends them to mrsfast
-       Code from psudmant's super_mapper.py"""
+def chunk_reads(chr, start, end, bamfile, outfile, chunk_size, fifo):
+    """This takes blocks of reads from a bam, then chunks them and sends them to mrsfast"""
 
-    for l in bamfile.fetch(chr, start, end):
+    if chr == "unmapped":
+        fetch_string = "*"
+    elif start is None or end is None:
+        fetch_string = chr
+    else:
+        fetch_string = "%s:%d-%d" % (chr, start + 1, end - 1)
+
+    for l in pysam.view(bamfile, fetch_string):
         n_to_do = l.rlen // chunk_size
         for k in range(n_to_do):
             outfile.write(">0\n" + l.seq[k*chunk_size : k*chunk_size + chunk_size] + "\n")
+
+    #Handle regions where there are no reads
+    try:
+        l
+    except NameError:
+        if args.fifo is not None:
+            with open(fifo, "w") as fifo_handle:
+                fifo_handle.write("ERROR: no reads for %s\n" % fetch_string)
+        outfile.write("\n")
+        sys.stderr.write("No reads for %s\n" % fetch_string)
     
 def chunk_reads_old(chr, start, end, bamfile, outfile, chunk_size, dt):
     """This takes blocks of reads from a bam, then chunks them and sends them to mrsfast
@@ -50,21 +67,19 @@ def chunk_reads_old(chr, start, end, bamfile, outfile, chunk_size, dt):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("bamfile")
-    parser.add_argument("chr")
-    parser.add_argument("start", type=int)
-    parser.add_argument("end", type=int)
+    parser.add_argument("chr", help="Input bam contig to chunk. Use 'unmapped' to get all unmapped reads.")
+    parser.add_argument("--start", type=int)
+    parser.add_argument("--end", type=int)
     parser.add_argument("--outfile", default = "/dev/stdout")
     parser.add_argument("--chunk_size", default = 36, type = int)
+    parser.add_argument("--fifo", help = "Path to fifo file")
 
     args = parser.parse_args()
 
-    bamfile = pysam.AlignmentFile(args.bamfile, "rb")
-    #outfile = pysam.AlignmentFile(args.outfile, "w", template = bamfile)
+    #bamfile = pysam.AlignmentFile(args.bamfile, "rb")
     outfile = open(args.outfile, "w")
 
-    dt = np.dtype("a%d" % (args.chunk_size + 1))
+    chunk_reads(args.chr, args.start, args.end, args.bamfile, outfile, args.chunk_size, args.fifo)
 
-    chunk_reads(args.chr, args.start, args.end, bamfile, outfile, args.chunk_size, dt)
-
-    bamfile.close()
+    #bamfile.close()
     outfile.close()
