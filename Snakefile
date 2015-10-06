@@ -74,7 +74,7 @@ rule map_and_count_unmapped:
             "python3 chunker.py {input} unmapped --fifo {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
-            "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE}"
+            "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE}"
             )
 
 rule map_and_count:
@@ -95,5 +95,5 @@ rule map_and_count:
             "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} --fifo {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
-            "python3 mrsfast_simple_mapper.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
+            "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
