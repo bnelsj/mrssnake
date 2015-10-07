@@ -32,21 +32,17 @@ with open(MANIFEST, "r") as reader:
         sn, bam = line.rstrip().split()
         SAMPLES[sn] = bam
 
-REGIONS = {}
-
-for sample, bam in SAMPLES.items():
-    REGIONS[sample] = []
-
-    header = pysam.view("-H", bam)
+def get_sparse_matrices_from_sample(wildcards):
+    header = pysam.view("-H", SAMPLES[wildcards.sample])
     contigs = {line.split()[1].replace("SN:",""): int(line.split()[2].replace("LN:","")) for line in header if line.startswith("@SQ")}
+    regions = ["unmapped"]
 
     for contig, contig_length in contigs.items():
         nregions = contig_length // WINDOW_SIZE + 1
         coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
-        REGIONS[sample].extend(["%s.%s" % (contig, x) for x in coords])
+        regions.extend(["%s.%s" % (contig, x) for x in coords])
 
-def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in REGIONS[wildcards.sample] + ["unmapped"]]
+    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in regions]
 
 localrules: all
 
@@ -56,7 +52,7 @@ rule all:
 rule merge_sparse_matrices:
     input: get_sparse_matrices_from_sample
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=8G -l disk_free=20G"
+    params: sge_opts = "-l mfree=16G -l disk_free=20G"
     benchmark: "benchmarks/merger/{sample}.json"
     shell:
         "python3 merger.py $TMPDIR/wssd_out_file --infiles {input}; "
@@ -71,8 +67,8 @@ rule map_and_count_unmapped:
         fifo = "$TMPDIR/mrsfast_fifo"
         shell(
             "mkfifo {fifo}; "
-            'samtools view {input} "*" | '
-            "python3 chunker.py {input} unmapped --fifo {fifo} | "
+            "samtools view -h {input} '*' | "
+            "python3 chunker.py /dev/stdin unmapped --fifo {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE}"
