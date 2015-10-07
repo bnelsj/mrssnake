@@ -6,6 +6,7 @@ try:
 except ImportError:
     import pickle
 
+import sys
 import argparse
 import tables
 import numpy as np
@@ -15,7 +16,9 @@ def write_to_h5(counts, outfile):
     fout = tables.open_file(outfile, mode="w")
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
-    for contig, matrix in counts.items():
+    for i, contig, matrix in enumerate(counts.items()):
+        sys.stdout.write("Merger: %d Creating array for %s\n" %(i+1, contig))
+        sys.stdout.flush()
         nrows, ncols = matrix.shape
         nedists = nrows // 2
         carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
@@ -41,15 +44,22 @@ if __name__ == "__main__":
 
     contigs = {}
 
-    for infile in args.infiles:
+    ninfiles = len(args.infiles)
+
+    for i, infile in enumerate(args.infiles):
         with open(infile, "rb") as file:
+            sys.stdout.write("Loading pickle %d of %d: %s\n" % (i+1, ninfiles, infile))
+            sys.stdout.flush()
             dat = pickle.load(file)
 
             for contig, matrix in dat.items():
                 if contig not in contigs:
-                    contigs[contig] = matrix
+                    contigs[contig] = matrix.tocsr()
                 else:
-                    contigs[contig] += matrix
+                    contigs[contig] += matrix.tocsr()
                 del(matrix)
+
+    sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
+    sys.stdout.flush()
 
     write_to_h5(contigs, args.outfile)
