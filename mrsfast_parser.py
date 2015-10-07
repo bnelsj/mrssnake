@@ -12,20 +12,25 @@ if __name__ == "__main__":
 
     header = pysam.view("-H", args.template_file)
     with open(args.outfile, "w") as writer:
-        
+
+        for line in header:
+            writer.write(line)
         input = open(args.infile, "r")
         first = input.readline()
-        if first.startswith("ERROR:"):
+        if first.startswith("Chunker:"):
             while True:
                 try:
                     writer.write(first)
                 except BrokenPipeError:
                     break
         else:
-            for line in header:
-                writer.write(line)
+            sys.stderr.write("Parser: got first line\n")
+            sys.stderr.flush()
             writer.write(first)
             for line in input:
-                writer.write(line)
-        sys.stderr.write("Finished parsing input\n")
-        input.close()
+                if not line.startswith("Chunker:"):
+                    writer.write(line)
+            input.close()
+        sys.stderr.write("Parser: finished parsing input\n")
+        sys.stderr.flush()
+    sys.exit()
