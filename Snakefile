@@ -33,8 +33,9 @@ with open(MANIFEST, "r") as reader:
         SAMPLES[sn] = bam
 
 def get_sparse_matrices_from_sample(wildcards):
-    header = pysam.view("-H", SAMPLES[wildcards.sample])
-    contigs = {line.split()[1].replace("SN:",""): int(line.split()[2].replace("LN:","")) for line in header if line.startswith("@SQ")}
+    bam = pysam.AlignmentFile(SAMPLES[wildcards.sample])
+    contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
+    bam.close()
     regions = ["unmapped"]
 
     for contig, contig_length in contigs.items():
@@ -68,7 +69,7 @@ rule map_and_count_unmapped:
         shell(
             "mkfifo {fifo}; "
             "samtools view -h {input} '*' | "
-            "python3 chunker.py /dev/stdin unmapped --fifo {fifo} | "
+            "python3 chunker.py /dev/stdin unmapped {fifo} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE}"
@@ -89,7 +90,7 @@ rule map_and_count:
             chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
-            "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} --fifo {fifo} | "
+            "python3 chunker.py {input} {chr_trimmed} {fifo} --start {start} --end {end} | "
             "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
