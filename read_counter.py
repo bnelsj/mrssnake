@@ -33,10 +33,12 @@ def count_reads(samfile, contigs, args):
             length = contigs[contig]
             if contig in args.common_contigs:
                 read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
-                sys.stdout.write(contig + "(%s, %s) numpy array\n" % (nrows, length))
+                sys.stderr.write("Counter: %s (%d, %d) numpy array\n" % (contig, nrows, length))
+                sys.stderr.flush()
             else:
                 read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
-                sys.stdout.write(contig + " scipy lil_matrix\n")
+                sys.stderr.write("Counter: %s scipy lil_matrix\n" % contig)
+                sys.stderr.flush()
 
 
         if contig in args.common_contigs:
@@ -51,9 +53,9 @@ def count_reads(samfile, contigs, args):
         # Update read start counts
         read_dict[contig][edist, start] += 1
 
-        if i % 100000 == 0:
-            sys.stdout.write("%d reads processed\n" % i)
-            sys.stdout.flush()
+        if i % 1000000 == 0:
+            sys.stderr.write("Counter: %d reads processed\n" % i)
+            sys.stderr.flush()
 
     return read_dict
 
@@ -77,26 +79,41 @@ if __name__ == "__main__":
             contigs[contig] = int(length)
 
     samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
+    sys.stderr.write("Counter: got samfile header\n")
+    sys.stdout.flush()
 
     try:
         read_dict = count_reads(samfile, contigs, args)
-    except NotImplementedError:
+    except OSError as e:
+        sys.stderr.write(str(e))
+        sys.stderr.flush()
         read_dict = {}
         with open(args.infile, "r") as reader:
             msg = reader.readline() # This line might be truncated
             msg = reader.readline()
+            sys.stderr.write("\n")
             sys.stderr.write("Counter got message: %s" % msg)
-            if msg.startswith("ERROR: no reads"):
+            if msg.startswith("Chunker:"):
                 pass # Write empty pickle
             else:
                 sys.exit(1)
     finally:
         samfile.close()
 
+    sys.stderr.write("Counter: finished counting reads\n")
+    sys.stderr.flush()
+
     for contig, array in read_dict.items():
         if contig in args.common_contigs:
             read_dict[contig] = lil_matrix(array)
             del(array)
 
+    sys.stderr.write("Counter: finished converting numpy arrays to lil_matrix\n")
+    sys.stderr.flush()
+
     with open(args.outfile, "wb") as outfile:
         pickle.dump(read_dict, outfile, pickle.HIGHEST_PROTOCOL)
+
+    sys.stderr.write("Counter: finished pickling matrices\n")
+    sys.stderr.flush()
+    sys.exit()
