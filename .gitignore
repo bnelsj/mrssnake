@@ -1,3 +1,4 @@
+mapping/
 log/
 .snakemake/
 benchmarks/
