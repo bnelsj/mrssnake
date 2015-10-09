@@ -10,6 +10,7 @@ if config == {}:
 MANIFEST = config["manifest"]
 
 MASKED_REF = config["masked_ref"]
+MRSFAST_BINARY = config["mrsfast_binary"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
 TEMPLATE = config["template"]
@@ -69,8 +70,8 @@ rule map_and_count_unmapped:
         shell(
             "mkfifo {fifo}; "
             "samtools view -h {input} '*' | "
-            "python3 chunker.py /dev/stdin unmapped {fifo} | "
-            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
+            "python3 chunker.py /dev/stdin unmapped | "
+            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE}"
             )
@@ -79,7 +80,7 @@ rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
     params: sge_opts = "-l mfree=6G"
-    benchmark: "benchmarks/counter/{sample}.{chr}.{num}.json"
+    benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
     run:
         chr = wildcards.chr
         start, end = wildcards.num.split("_")
@@ -90,8 +91,8 @@ rule map_and_count:
             chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
-            "python3 chunker.py {input} {chr_trimmed} {fifo} --start {start} --end {end} | "
-            "mrsfast --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq1 /dev/stdin -o {fifo} -u /dev/stdout | "
+            "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
+            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} | "
             "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
             "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
