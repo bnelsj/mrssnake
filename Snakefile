@@ -65,6 +65,7 @@ rule map_and_count_unmapped:
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
     params: sge_opts = "-l mfree=12G"
     benchmark: "benchmarks/counter/{sample}.unmapped.json"
+    priority: 50
     run:
         fifo = "$TMPDIR/mrsfast_fifo"
         shell(
