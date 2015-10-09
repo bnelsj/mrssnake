@@ -15,7 +15,7 @@ import numpy as np
 from scipy.sparse import lil_matrix
 
 
-def count_reads(samfile, contigs, args):
+def count_reads(samfile, contigs, array_contigs, args):
     read_dict = {}
     nrows = 2 * args.max_edist + 2
     nstart_rows = nrows // 2
@@ -31,7 +31,7 @@ def count_reads(samfile, contigs, args):
 
         if contig not in read_dict:
             length = contigs[contig]
-            if contig in args.common_contigs:
+            if contig in array_contigs:
                 read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
                 sys.stderr.write("Counter: %s (%d, %d) numpy array\n" % (contig, nrows, length))
                 sys.stderr.flush()
@@ -41,14 +41,14 @@ def count_reads(samfile, contigs, args):
                 sys.stderr.flush()
 
 
-        if contig in args.common_contigs:
+        if contig in array_contigs:
             # Update read depth counts for numpy array
-            read_dict[contig][edist + nstart_rows, start:end+1] += 1
+            read_dict[contig][edist + nstart_rows, start:end] += 1
         else:
             # Update read depth counts for sparse matrix
-            slice = read_dict[contig][edist + nstart_rows, start:end+1].toarray()
+            slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
             slice += 1
-            read_dict[contig][:, start:end+1] = slice
+            read_dict[contig][:, start:end] = slice
  
         # Update read start counts
         read_dict[contig][edist, start] += 1
@@ -67,6 +67,8 @@ if __name__ == "__main__":
     parser.add_argument("contig_lengths", help="tab-delimited file with contig names and lengths")
     parser.add_argument("--max_edist", default = 2, type = int, help = "Maximum edit distance of input reads")
     parser.add_argument("--common_contigs", default = [], nargs="+", help = "Create numpy array for common contigs (Much faster, more memory)")
+    parser.add_argument("--all_contigs", action="store_true", help="Create numpy array for all contigs (Fast, high mem requirement)")
+    parser.add_argument("--noncanonical_contigs", action="store_true", help="Create numpy array for all noncanonical contigs (Fast, high mem requirement).")
 
     args = parser.parse_args()
 
@@ -78,25 +80,28 @@ if __name__ == "__main__":
             #contig = contig.replace("chr", "")
             contigs[contig] = int(length)
 
+    array_contigs = []
+
+    if args.all_contigs:
+        array_contigs = contigs.keys()
+
+    else:
+        if args.common_contigs is not None:
+            array_contigs.extend(args.common_contigs)
+        if args.noncanonical_contigs is not None:
+            canonical = ["chr%s" % str(x) for x in list(range(1,25)) + ["X", "Y", "M"]]
+            array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
+
     samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
     sys.stderr.write("Counter: got samfile header\n")
     sys.stdout.flush()
 
     try:
-        read_dict = count_reads(samfile, contigs, args)
+        read_dict = count_reads(samfile, contigs, array_contigs, args)
     except OSError as e:
         sys.stderr.write(str(e))
         sys.stderr.flush()
-        read_dict = {}
-        with open(args.infile, "r") as reader:
-            msg = reader.readline() # This line might be truncated
-            msg = reader.readline()
-            sys.stderr.write("\n")
-            sys.stderr.write("Counter got message: %s" % msg)
-            if msg.startswith("Chunker:"):
-                pass # Write empty pickle
-            else:
-                sys.exit(1)
+        sys.exit(1)
     finally:
         samfile.close()
 
@@ -104,7 +109,7 @@ if __name__ == "__main__":
     sys.stderr.flush()
 
     for contig, array in read_dict.items():
-        if contig in args.common_contigs:
+        if isinstance(array, np.ndarray):
             read_dict[contig] = lil_matrix(array)
             del(array)
 
