@@ -1,6 +1,7 @@
 {
   "manifest": "manifest.txt",
-  "masked_ref": "/net/eichler/vol7/home/psudmant/genomes/index_files/mrsfast_hg19/hg19_masked",
+  "masked_ref": "/net/eichler/vol5/home/bnelsj/mrsfast_index.v3.3.8/hg19_masked",
+  "mrsfast_binary": "/net/eichler/vol4/home/jlhudd/src/mrsfast/github/mrsfast/mrsfast",
   "contigs": "hg19_masked.contigs.txt",
   "window_size": 5000000,
   "template": "fixed_output.sam",

@@ -27,7 +27,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("bamfile")
     parser.add_argument("chr", help="Input bam contig to chunk. Use 'unmapped' to get all unmapped reads.")
-    parser.add_argument("fifo", help = "Path to fifo file")
     parser.add_argument("--start", type=int)
     parser.add_argument("--end", type=int)
     parser.add_argument("--outfile", default = "/dev/stdout")
@@ -53,10 +52,8 @@ if __name__ == "__main__":
 
     #Handle regions where there are no reads
     try:
-        sys.stderr.write("Chunker: finished chunking %d reads to chunk\n" % i)
+        sys.stderr.write("Chunker: finished chunking %d reads\n" % i)
     except NameError:
-        with open(args.fifo, "w") as fifo:
-            fifo.write("Chunker: found no reads to chunk\n")
         outfile.write("\n")
         sys.stderr.write("Chunker: found no reads to chunk\n")
     finally:
