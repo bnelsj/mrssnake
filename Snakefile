@@ -71,9 +71,8 @@ rule map_and_count_unmapped:
             "mkfifo {fifo}; "
             "samtools view -h {input} '*' | "
             "python3 chunker.py /dev/stdin unmapped | "
-            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} | "
-            "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
-            "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE}"
+            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit | "
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --noncanonical_contigs"
             )
 
 rule map_and_count:
@@ -92,7 +91,6 @@ rule map_and_count:
         shell(
             "mkfifo {fifo}; "
             "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
-            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} | "
-            "python3 mrsfast_parser.py {fifo} /dev/stdout {TEMPLATE} | "
-            "python3 read_counter.py /dev/stdin {output} {CONTIGS_FILE} --common_contigs {chr}"
+            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit | "
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
