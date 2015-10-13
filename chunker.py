@@ -13,11 +13,14 @@ def get_fetch_list(chr, start, end):
         fetch_list = [chr, start, end]
     return fetch_list
 
-def chunk_read(i, read, outfile, chunk_size, write_step = 1000000):
+def chunk_read(i, read, outfile, chunk_size, write_step = 1000000, line_buffer =1000):
     "Break a read into kmers"
     n_to_do = read.rlen // chunk_size
     for k in range(n_to_do):
         outfile.write(">0\n" + read.seq[k*chunk_size : k*chunk_size + chunk_size] + "\n")
+
+    if i % line_buffer == 0:
+        outfile.flush()
 
     if i % write_step == 0:
         sys.stderr.write("Chunker: %d reads chunked\n" % i)
@@ -42,17 +45,24 @@ if __name__ == "__main__":
     msg = "Chunker: Chunking %s reads\n" % " ".join(map(str, fetch_list))
     sys.stderr.write(msg)
 
-    if args.chr == "unmapped": # Assumes unmapped reads passed as sam by samtools view "*"
-        for i, read in enumerate(bamfile.fetch(until_eof=True)):
-            chunk_read(i, read, outfile, args.chunk_size)
-    else:
-        for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
-            chunk_read(i, read, outfile, args.chunk_size) 
-    bamfile.close()
+    try:
+        if args.chr == "unmapped": # Assumes unmapped reads passed as sam by samtools view "*"
+            for i, read in enumerate(bamfile.fetch(until_eof=True)):
+                chunk_read(i, read, outfile, args.chunk_size)
+        else:
+            for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
+                chunk_read(i, read, outfile, args.chunk_size) 
+        bamfile.close()
+    except BrokenPipeError as e:
+        sys.stdout.write(str(e))
+        sys.stdout.flush()
+        sys.exit(1)
+    finally:
+        bamfile.close()
 
     #Handle regions where there are no reads
     try:
-        sys.stderr.write("Chunker: finished chunking %d reads\n" % i)
+        sys.stderr.write("Chunker: finished chunking %d reads\n" % i + 1)
     except NameError:
         outfile.write("\n")
         sys.stderr.write("Chunker: found no reads to chunk\n")
