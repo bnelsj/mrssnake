@@ -16,7 +16,7 @@ def write_to_h5(counts, outfile):
     fout = tables.open_file(outfile, mode="w")
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
-    for i, contig, matrix in enumerate(counts.items()):
+    for i, (contig, matrix) in enumerate(counts.items()):
         sys.stdout.write("Merger: %d Creating array for %s\n" %(i+1, contig))
         sys.stdout.flush()
         nrows, ncols = matrix.shape
@@ -62,4 +62,6 @@ if __name__ == "__main__":
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
     sys.stdout.flush()
 
+    for contig, array in contigs.items():  
+        print("%s: %d" % (contig, np.count_nonzero(array.todense())))
     write_to_h5(contigs, args.outfile)
