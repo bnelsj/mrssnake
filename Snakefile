@@ -72,11 +72,11 @@ rule map_and_count_unmapped:
         shell(
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
-            "rsync {MASKED_REF}/* /var/tmp/mrsfast_index; "
+            "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "samtools view -h {input} '*' | "
             "python3 chunker.py /dev/stdin unmapped | "
-            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 > /dev/stderr | "
+            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
 
@@ -89,13 +89,17 @@ rule map_and_count:
         chr = wildcards.chr
         start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
+        masked_ref_name = os.path.basename(MASKED_REF)
         if TRIM_CONTIGS:
             chr_trimmed = chr.replace("chr", "")
         else:
             chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
+            "mkdir -p /var/tmp/mrsfast_index; "
+            "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
+            "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
-            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit > /dev/stderr | "
+            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
