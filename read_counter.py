@@ -14,6 +14,70 @@ import numpy as np
 
 from scipy.sparse import lil_matrix
 
+def get_array_contigs(contigs, args):
+
+    array_contigs = []
+    if args.all_contigs:
+        array_contigs = contigs.keys()
+
+    else:
+        if args.common_contigs is not None:
+            array_contigs.extend(args.common_contigs)
+        if args.noncanonical_contigs:
+            canonical = ["chr%s" % str(x) for x in list(range(1,25)) + ["X", "Y", "M"]]
+            array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
+    return array_contigs
+
+
+def count_reads_sans_pysam(input, contigs, array_contigs, args):
+    read_dict = {}
+    nrows = 2 * args.max_edist + 2
+    nstart_rows = nrows // 2
+
+    with open(input, "r") as infile:
+        for line in infile:
+            if line.startswith("@"):
+                continue
+            contig, start, cigar, edist = line.split()[2,3,5,11]
+
+            if edist > args.max_edist:
+                continue
+
+            start = start - 1
+            rlen = int(cigar[:-1])
+            end = start + rlen
+            edist = int(edist[4:])
+
+            if contig not in read_dict:
+                length = contigs[contig]
+                if contig in array_contigs:
+                    read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
+                    sys.stderr.write("Counter: %s (%d, %d) numpy array\n" % (contig, nrows, length))
+                    sys.stderr.flush()
+                else:
+                    read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
+                    sys.stderr.write("Counter: %s scipy lil_matrix\n" % contig)
+                    sys.stderr.flush()
+
+
+            if contig in array_contigs:
+                # Update read depth counts for numpy array
+                read_dict[contig][edist + nstart_rows, start:end] += 1
+            else:
+                # Update read depth counts for sparse matrix
+                slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
+                slice += 1
+                read_dict[contig][:, start:end] = slice
+     
+            # Update read start counts
+            read_dict[contig][edist, start] += 1
+
+            if i % 1000000 == 0:
+                sys.stderr.write("Counter: %d reads processed\n" % i)
+                sys.stderr.flush()
+
+    return read_dict
+
 
 def count_reads(samfile, contigs, array_contigs, args):
     read_dict = {}
@@ -22,8 +86,8 @@ def count_reads(samfile, contigs, array_contigs, args):
 
     for i, read in enumerate(samfile):
         contig = samfile.getrname(read.reference_id)
-        start = read.qstart
-        end = read.qend
+        start = read.reference_start
+        end = read.reference_end
 
         edist = read.get_tag("NM")
         if edist > args.max_edist:
@@ -77,20 +141,9 @@ if __name__ == "__main__":
     with open(args.contig_lengths, "r") as reader:
         for line in reader:
             contig, length = line.rstrip().split()
-            #contig = contig.replace("chr", "")
             contigs[contig] = int(length)
 
-    array_contigs = []
-
-    if args.all_contigs:
-        array_contigs = contigs.keys()
-
-    else:
-        if args.common_contigs is not None:
-            array_contigs.extend(args.common_contigs)
-        if args.noncanonical_contigs is not None:
-            canonical = ["chr%s" % str(x) for x in list(range(1,25)) + ["X", "Y", "M"]]
-            array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
+    array_contigs = get_array_contigs(contigs, args)
 
     samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
     sys.stderr.write("Counter: got samfile header\n")
