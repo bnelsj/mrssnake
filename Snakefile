@@ -54,7 +54,7 @@ rule all:
 rule merge_sparse_matrices:
     input: get_sparse_matrices_from_sample
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=16G -l disk_free=20G"
+    params: sge_opts = "-l mfree=16G -l disk_free=20G -pe orte 1"
     benchmark: "benchmarks/merger/{sample}.json"
     shell:
         "python3 merger.py $TMPDIR/wssd_out_file --infiles {input}; "
@@ -63,17 +63,21 @@ rule merge_sparse_matrices:
 rule map_and_count_unmapped:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
-    params: sge_opts = "-l mfree=12G"
-    benchmark: "benchmarks/counter/{sample}.unmapped.json"
+    params: sge_opts = "-pe orte 5 -l mfree=50G"
+    benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
     priority: 50
     run:
         fifo = "$TMPDIR/mrsfast_fifo"
+        masked_ref_name = os.path.basename(MASKED_REF)
         shell(
             "mkfifo {fifo}; "
+            "mkdir -p /var/tmp/mrsfast_index; "
+            "rsync {MASKED_REF}/* /var/tmp/mrsfast_index; "
+            "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "samtools view -h {input} '*' | "
             "python3 chunker.py /dev/stdin unmapped | "
-            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --noncanonical_contigs"
+            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 > /dev/stderr | "
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
 
 rule map_and_count:
@@ -92,6 +96,6 @@ rule map_and_count:
         shell(
             "mkfifo {fifo}; "
             "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
-            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit | "
+            "{MRSFAST_BINARY} --search {MASKED_REF} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit > /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
