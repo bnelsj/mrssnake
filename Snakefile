@@ -54,11 +54,11 @@ rule all:
 rule merge_sparse_matrices:
     input: get_sparse_matrices_from_sample
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=16G -l disk_free=20G -pe serial 1"
+    params: sge_opts = "-l mfree=32G -l disk_free=20G -pe serial 1"
     benchmark: "benchmarks/merger/{sample}.json"
-    shell:
-        "python3 merger.py $TMPDIR/wssd_out_file --infiles {input}; "
-        "rsync $TMPDIR/wssd_out_file {output}"
+    run:
+        shell("python3 merger.py $TMPDIR/wssd_out_file --infiles {input}")
+        shell("rsync $TMPDIR/wssd_out_file {output}")
 
 rule map_and_count_unmapped:
     input: lambda wildcards: SAMPLES[wildcards.sample]
