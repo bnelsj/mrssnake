@@ -12,8 +12,7 @@ import tables
 import numpy as np
 from scipy.sparse import lil_matrix
 
-def write_to_h5(counts, outfile):
-    fout = tables.open_file(outfile, mode="w")
+def write_to_h5(counts, fout):
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
     for i, (contig, matrix) in enumerate(counts.items()):
@@ -33,8 +32,7 @@ def write_to_h5(counts, outfile):
 
         del(wssd_contig)
 
-    fout.close()
-
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("outfile")
@@ -42,6 +40,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    fout = tables.open_file(args.outfile, mode="w")
+    sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
     contigs = {}
 
     ninfiles = len(args.infiles)
@@ -64,4 +64,5 @@ if __name__ == "__main__":
 
     for contig, array in contigs.items():  
         print("%s: %d" % (contig, np.count_nonzero(array.todense())))
-    write_to_h5(contigs, args.outfile)
+    write_to_h5(contigs, fout)
+    fout.close()
