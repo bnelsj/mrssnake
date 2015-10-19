@@ -13,6 +13,7 @@ import pysam
 import numpy as np
 
 from scipy.sparse import lil_matrix
+from scipy.sparse import csr_matrix
 
 def get_array_contigs(contigs, args):
 
@@ -162,11 +163,10 @@ if __name__ == "__main__":
     sys.stderr.flush()
 
     for contig, array in read_dict.items():
-        if isinstance(array, np.ndarray):
-            read_dict[contig] = lil_matrix(array)
-            del(array)
+        read_dict[contig] = csr_matrix(array)
+        del(array)
 
-    sys.stderr.write("Counter: finished converting numpy arrays to lil_matrix\n")
+    sys.stderr.write("Counter: finished converting numpy arrays and lil matrices to csr_matrix\n")
     sys.stderr.flush()
 
     with open(args.outfile, "wb") as outfile:
