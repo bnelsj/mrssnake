@@ -30,6 +30,8 @@ def write_to_h5(counts, fout):
         # Add starts
         carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
 
+        fout.flush()
+
         del(wssd_contig)
 
     
@@ -62,7 +64,7 @@ if __name__ == "__main__":
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
     sys.stdout.flush()
 
-    for contig, array in contigs.items():  
-        print("%s: %d" % (contig, np.count_nonzero(array.todense())))
     write_to_h5(contigs, fout)
+    sys.stdout.write("Finished writing wssd_out_file. Closing.\n")
+    sys.stdout.flush()
     fout.close()
