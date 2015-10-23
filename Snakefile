@@ -65,7 +65,7 @@ rule merge_sparse_matrices:
 rule map_and_count_unmapped:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
-    params: sge_opts = "-pe orte 5 -l mfree=50G"
+    params: sge_opts = "-pe orte 5 -l mfree=40G"
     benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
     priority: 50
     run:
@@ -85,7 +85,7 @@ rule map_and_count_unmapped:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
-    params: sge_opts = "-l mfree=6G"
+    params: sge_opts = "-l mfree=4G"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
     run:
         chr = wildcards.chr
