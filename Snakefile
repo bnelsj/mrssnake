@@ -10,7 +10,6 @@ if config == {}:
 MANIFEST = config["manifest"]
 
 MASKED_REF = config["masked_ref"]
-MRSFAST_BINARY = config["mrsfast_binary"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
 TEMPLATE = config["template"]
@@ -78,7 +77,7 @@ rule map_and_count_unmapped:
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "samtools view -h {input} '*' | "
             "python3 chunker.py /dev/stdin unmapped | "
-            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 >> /dev/stderr | "
+            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
 
@@ -102,6 +101,6 @@ rule map_and_count:
             "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
-            "{MRSFAST_BINARY} --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
+            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
             )
