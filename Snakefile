@@ -12,8 +12,7 @@ MANIFEST = config["manifest"]
 MASKED_REF = config["masked_ref"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
-TEMPLATE = config["template"]
-TRIM_CONTIGS = config["trim_contigs"].upper().startswith("Y")
+TRIM_CONTIGS = config["trim_contigs"]
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -53,7 +52,7 @@ rule all:
 rule merge_sparse_matrices:
     input: get_sparse_matrices_from_sample
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1"
+    params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     benchmark: "benchmarks/merger/{sample}.json"
     run:
         shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
@@ -64,7 +63,7 @@ rule merge_sparse_matrices:
 rule map_and_count_unmapped:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
-    params: sge_opts = "-pe orte 5 -l mfree=40G"
+    params: sge_opts = "-pe orte 5 -l mfree=40G -N map_unmapped"
     benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
     priority: 50
     run:
@@ -84,7 +83,7 @@ rule map_and_count_unmapped:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
-    params: sge_opts = "-l mfree=4G"
+    params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
     run:
         chr = wildcards.chr
