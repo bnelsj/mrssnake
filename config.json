@@ -1,7 +1,6 @@
 {
-  "manifest": "test_samples.all.txt",
+  "manifest": "manifest.txt",
   "masked_ref": "/net/eichler/vol5/home/bnelsj/mrsfast_index.v3.3.8/hg19_masked",
   "contigs": "hg19_masked.contigs.txt",
-  "window_size": 5000000,
-  "trim_contigs": true
+  "window_size": 5000000
 }
