@@ -57,12 +57,16 @@ if __name__ == "__main__":
         sys.stdout.write(str(e))
         sys.stdout.flush()
         sys.exit(1)
+    except ValueError as e:
+        sys.stdout.write(str(e))
+        sys.stdout.flush()
+        sys.exit(1)
     finally:
         bamfile.close()
 
     #Handle regions where there are no reads
     try:
-        sys.stderr.write("Chunker: finished chunking %d reads\n" % i + 1)
+        sys.stderr.write("Chunker: finished chunking %d reads\n" % int(i + 1))
     except NameError:
         outfile.write("\n")
         sys.stderr.write("Chunker: found no reads to chunk\n")
