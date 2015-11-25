@@ -1,2 +1,3 @@
 AFR_BantuKenya_HGDP01414_F	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/AFR_BantuKenya_HGDP01414_F.bam
 OCN_Bougainville_HGDP00656_F	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/OCN_Bougainville_HGDP00656_F.bam
+WEA_FinlandFIN_HG00360_M	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/WEA_FinlandFIN_HG00360_M.bam
