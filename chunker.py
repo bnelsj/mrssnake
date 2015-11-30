@@ -51,7 +51,10 @@ if __name__ == "__main__":
                 chunk_read(i, read, outfile, args.chunk_size)
         else:
             for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
-                chunk_read(i, read, outfile, args.chunk_size) 
+                if args.start is not None and read.reference_start < args.start:
+                    continue
+                else:
+                    chunk_read(i, read, outfile, args.chunk_size) 
         bamfile.close()
     except BrokenPipeError as e:
         sys.stdout.write(str(e))
