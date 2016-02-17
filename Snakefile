@@ -12,7 +12,6 @@ MANIFEST = config["manifest"]
 MASKED_REF = config["masked_ref"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
-TRIM_CONTIGS = config["trim_contigs"]
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -86,20 +85,15 @@ rule map_and_count:
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
     run:
-        chr = wildcards.chr
         start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
-        if TRIM_CONTIGS:
-            chr_trimmed = chr.replace("chr", "")
-        else:
-            chr_trimmed = chr
         shell(
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
             "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "python3 chunker.py {input} {chr_trimmed} --start {start} --end {end} | "
+            "python3 chunker.py {input} {wildcards.chr} --start {start} --end {end} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {chr}"
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {wildcards.chr}"
             )

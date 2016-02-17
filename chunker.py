@@ -51,9 +51,16 @@ if __name__ == "__main__":
                 chunk_read(i, read, outfile, args.chunk_size)
         else:
             for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
-                chunk_read(i, read, outfile, args.chunk_size) 
+                if args.start is not None and read.reference_start < args.start:
+                    continue
+                else:
+                    chunk_read(i, read, outfile, args.chunk_size) 
         bamfile.close()
     except BrokenPipeError as e:
+        sys.stdout.write(str(e))
+        sys.stdout.flush()
+        sys.exit(1)
+    except ValueError as e:
         sys.stdout.write(str(e))
         sys.stdout.flush()
         sys.exit(1)
@@ -62,7 +69,7 @@ if __name__ == "__main__":
 
     #Handle regions where there are no reads
     try:
-        sys.stderr.write("Chunker: finished chunking %d reads\n" % (i + 1))
+        sys.stderr.write("Chunker: finished chunking %d reads\n" % int(i + 1))
     except NameError:
         outfile.write("\n")
         sys.stderr.write("Chunker: found no reads to chunk\n")
