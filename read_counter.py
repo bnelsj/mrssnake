@@ -108,12 +108,12 @@ def count_reads(samfile, contigs, array_contigs, args):
 
         if contig in array_contigs:
             # Update read depth counts for numpy array
-            read_dict[contig][edist + nstart_rows, start:end+1] += 1
+            read_dict[contig][edist + nstart_rows, start:end] += 1
         else:
             # Update read depth counts for sparse matrix
-            slice = read_dict[contig][edist + nstart_rows, start:end+1].toarray()
+            slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
             slice += 1
-            read_dict[contig][:, start:end+1] = slice
+            read_dict[contig][:, start:end] = slice
  
         # Update read start counts
         read_dict[contig][edist, start] += 1
