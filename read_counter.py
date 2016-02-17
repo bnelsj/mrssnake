@@ -60,6 +60,8 @@ def count_reads_sans_pysam(input, contigs, array_contigs, args):
                     sys.stderr.write("Counter: %s scipy lil_matrix\n" % contig)
                     sys.stderr.flush()
 
+            if end > contigs[contig]:
+                end = contigs[contig]
 
             if contig in array_contigs:
                 # Update read depth counts for numpy array
@@ -68,7 +70,7 @@ def count_reads_sans_pysam(input, contigs, array_contigs, args):
                 # Update read depth counts for sparse matrix
                 slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
                 slice += 1
-                read_dict[contig][:, start:end] = slice
+                read_dict[contig][edist + nstart_rows, start:end] = slice
      
             # Update read start counts
             read_dict[contig][edist, start] += 1
