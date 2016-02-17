@@ -29,6 +29,17 @@ def get_array_contigs(contigs, args):
             array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
     return array_contigs
 
+def update_read_depth_and_start(matrix, edist, nedists=3, start, end):
+    if isinstance(matrix, np.ndarray):
+        matrix[edist + nedists, start:end] += 1
+    else:
+        slice = matrix[edist + nedists, start:end].toarray()
+        slice += 1
+        matrix[edist + nedists, start:end] = slice
+
+    matrix[edist, start] += 1
+
+    return matrix
 
 def count_reads_sans_pysam(input, contigs, array_contigs, args):
     read_dict = {}
@@ -108,14 +119,14 @@ def count_reads(samfile, contigs, array_contigs, args):
                 sys.stderr.flush()
 
 
-        if contig in array_contigs:
+        if isinstance(read_dict[contig], np.ndarray):
             # Update read depth counts for numpy array
             read_dict[contig][edist + nstart_rows, start:end] += 1
         else:
             # Update read depth counts for sparse matrix
             slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
             slice += 1
-            read_dict[contig][:, start:end] = slice
+            read_dict[contig][edist + nstart_rows, start:end] = slice
  
         # Update read start counts
         read_dict[contig][edist, start] += 1
