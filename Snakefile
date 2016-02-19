@@ -79,11 +79,21 @@ rule map_and_count_unmapped:
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
 
+rule write_matrix_list_to_file:
+    input: lambda wildcards: SAMPLES[wildcards.sample]
+    output: "mapping/{sample}/{sample}/wssd_out_file_live"
+    params: sge_opts = "-l mfree=32G"
+    priority: 10
+    run:
+        files = get_sparse_matrices_from_sample(wildcards)
+        shell("python3 live_merger.py {output} --infiles {files}")
+
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
+    priority: 20
     run:
         start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
