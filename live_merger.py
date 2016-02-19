@@ -8,6 +8,7 @@ except ImportError:
 
 import sys
 import argparse
+import time
 import tables
 import numpy as np
 from scipy.sparse import lil_matrix
@@ -46,20 +47,29 @@ if __name__ == "__main__":
     sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
     contigs = {}
 
-    ninfiles = len(args.infiles)
+    infiles = set(args.infiles)
 
-    for i, infile in enumerate(args.infiles):
-        with open(infile, "rb") as file:
-            sys.stdout.write("Loading pickle %d of %d: %s\n" % (i+1, ninfiles, infile))
-            sys.stdout.flush()
-            dat = pickle.load(file)
+    total_infiles = len(infiles)
+    processed_infiles = 0
 
-            for contig, matrix in dat.items():
-                if contig not in contigs:
-                    contigs[contig] = matrix.tocsr()
-                else:
-                    contigs[contig] += matrix.tocsr()
-                del(matrix)
+    while(len(infiles) > 0):
+        for infile in infiles:
+            # Check if infile exists and hasn't been modified in 5 minutes
+            if os.path.isfile(infile) and os.path.getmtime(infile) - time.time() > 300:
+                with open(infile, "rb") as file:
+                    processed_infiles += 1
+                    sys.stdout.write("Loading pickle %d of %d: %s\n" % (processed_infiles, ninfiles, infile))
+                    sys.stdout.flush()
+                    dat = pickle.load(file)
+
+                    for contig, matrix in dat.items():
+                        if contig not in contigs:
+                            contigs[contig] = matrix.tocsr()
+                        else:
+                            contigs[contig] += matrix.tocsr()
+                        del(matrix)
+                infiles -= set(infile)
+        time.sleep(10)
 
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
     sys.stdout.flush()
