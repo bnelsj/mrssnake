@@ -29,7 +29,7 @@ def get_array_contigs(contigs, args):
             array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
     return array_contigs
 
-def update_read_depth_and_start(matrix, edist, nedists=3, start, end):
+def update_read_depth_and_start(matrix, edist, start, end, nedists=3):
     if isinstance(matrix, np.ndarray):
         matrix[edist + nedists, start:end] += 1
     else:

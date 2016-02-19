@@ -57,18 +57,22 @@ if __name__ == "__main__":
             # Check if infile exists and hasn't been modified in 5 minutes
             if os.path.isfile(infile) and os.path.getmtime(infile) - time.time() > 300:
                 with open(infile, "rb") as file:
-                    processed_infiles += 1
-                    sys.stdout.write("Loading pickle %d of %d: %s\n" % (processed_infiles, ninfiles, infile))
-                    sys.stdout.flush()
-                    dat = pickle.load(file)
+                    try:
+                        dat = pickle.load(infile)
+                    except pickle.UnpicklingError as e:
+                        print("Error:" infile, str(e))
+                        continue
+                processed_infiles += 1
+                sys.stdout.write("Loaded pickle %d of %d: %s\n" % (processed_infiles, ninfiles, infile))
+                sys.stdout.flush()
 
-                    for contig, matrix in dat.items():
-                        if contig not in contigs:
-                            contigs[contig] = matrix.tocsr()
-                        else:
-                            contigs[contig] += matrix.tocsr()
-                        del(matrix)
-                infiles -= set(infile)
+                for contig, matrix in dat.items():
+                    if contig not in contigs:
+                        contigs[contig] = matrix.tocsr()
+                    else:
+                        contigs[contig] += matrix.tocsr()
+                    del(matrix)
+                infiles.discard(infile)
         time.sleep(10)
 
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
