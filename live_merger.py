@@ -6,6 +6,7 @@ try:
 except ImportError:
     import pickle
 
+import os
 import sys
 import argparse
 import time
@@ -60,7 +61,7 @@ if __name__ == "__main__":
                     try:
                         dat = pickle.load(infile)
                     except pickle.UnpicklingError as e:
-                        print("Error:" infile, str(e))
+                        print("Error:", infile, str(e))
                         continue
                 processed_infiles += 1
                 sys.stdout.write("Loaded pickle %d of %d: %s\n" % (processed_infiles, ninfiles, infile))

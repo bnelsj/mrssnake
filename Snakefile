@@ -46,7 +46,17 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all
 
 rule all:
-    input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
+    input: expand("mapping/{sample}/{sample}/wssd_out_file_live", sample = SAMPLES.keys()),
+           expand("region_matrices/list/{sample}.txt", sample = SAMPLES.keys())
+
+rule list_sparse_matrices:
+    input: get_sparse_matrices_from_sample
+    output: "region_matrices/list/{sample}.txt"
+    params: sge_opts = ""
+    run:
+        with open(output[0], "w") as of:
+            for infile in input:
+                of.write(infile + "\n")
 
 rule merge_sparse_matrices:
     input: get_sparse_matrices_from_sample
@@ -62,7 +72,7 @@ rule merge_sparse_matrices:
 rule map_and_count_unmapped:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
-    params: sge_opts = "-pe orte 5 -l mfree=40G -N map_unmapped"
+    params: sge_opts = "-pe orte 4 -l mfree=40G -N map_unmapped"
     benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
     priority: 50
     run:
@@ -79,14 +89,13 @@ rule map_and_count_unmapped:
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
 
-rule write_matrix_list_to_file:
+rule merge_matrices_live:
     input: lambda wildcards: SAMPLES[wildcards.sample]
     output: "mapping/{sample}/{sample}/wssd_out_file_live"
-    params: sge_opts = "-l mfree=32G"
+    params: sge_opts = "-l mfree=32G -N merge_{sample}", files = get_sparse_matrices_from_sample
     priority: 10
-    run:
-        files = get_sparse_matrices_from_sample(wildcards)
-        shell("python3 live_merger.py {output} --infiles {files}")
+    shell:
+        "python3 live_merger.py {output} --infiles {params.files}"
 
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample]
