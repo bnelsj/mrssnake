@@ -46,6 +46,7 @@ if __name__ == "__main__":
 
     fout = tables.open_file(args.outfile, mode="w")
     sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
+    sys.stdout.flush()
     contigs = {}
 
     infiles = set(args.infiles)

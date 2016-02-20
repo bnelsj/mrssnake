@@ -46,8 +46,8 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all
 
 rule all:
-    input: expand("mapping/{sample}/{sample}/wssd_out_file_live", sample = SAMPLES.keys()),
-           expand("region_matrices/list/{sample}.txt", sample = SAMPLES.keys())
+    input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())#,
+           #expand("region_matrices/list/{sample}.txt", sample = SAMPLES.keys())
 
 rule list_sparse_matrices:
     input: get_sparse_matrices_from_sample
