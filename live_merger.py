@@ -34,8 +34,8 @@ def write_to_h5(counts, fout):
 
         fout.flush()
 
+        del(matrix)
         del(wssd_contig)
-
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     while(len(infiles) > 0):
         for infile in infiles:
             # Check if infile exists and hasn't been modified in 5 minutes
-            if os.path.isfile(infile) and os.path.getmtime(infile) - time.time() > 300:
+            if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
                 with open(infile, "rb") as file:
                     try:
                         dat = pickle.load(infile)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                         contigs[contig] += matrix.tocsr()
                     del(matrix)
                 infiles.discard(infile)
-        time.sleep(10)
+        time.sleep(30)
 
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
     sys.stdout.flush()
