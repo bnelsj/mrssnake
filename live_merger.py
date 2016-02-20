@@ -51,29 +51,32 @@ if __name__ == "__main__":
     infiles = set(args.infiles)
 
     total_infiles = len(infiles)
-    processed_infiles = 0
+    finished_infiles = set()
 
-    while(len(infiles) > 0):
-        for infile in infiles:
+    while(len(finished_infiles) < len(infiles)):
+        infiles_to_process = infiles - finished_infiles
+        for infile in infiles_to_process:
             # Check if infile exists and hasn't been modified in 5 minutes
             if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
                 with open(infile, "rb") as file:
                     try:
-                        dat = pickle.load(infile)
+                        dat = pickle.load(file)
                     except pickle.UnpicklingError as e:
-                        print("Error:", infile, str(e))
+                        sys.stderr.write("Error: %s: %s\n" % (infile, str(e)))
                         continue
-                processed_infiles += 1
-                sys.stdout.write("Loaded pickle %d of %d: %s\n" % (processed_infiles, ninfiles, infile))
-                sys.stdout.flush()
+                    except TypeError as e:
+                        sys.stderr.write("Error: %s: %s\n" % (infile, str(e)))
+                        continue
 
                 for contig, matrix in dat.items():
                     if contig not in contigs:
                         contigs[contig] = matrix.tocsr()
                     else:
                         contigs[contig] += matrix.tocsr()
-                    del(matrix)
-                infiles.discard(infile)
+                    del(matrix)               
+                finished_infiles.add(infile)
+                sys.stdout.write("Loaded pickle %d of %d: %s\n" % (int(len(finished_infiles)+1), total_infiles, infile))
+                sys.stdout.flush()
         time.sleep(30)
 
     sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
