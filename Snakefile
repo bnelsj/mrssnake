@@ -41,8 +41,10 @@ JOBFILE = config["jobfile"]
 if os.path.exists(JOBFILE):
     with open(JOBFILE, "r") as reader:
         SAMPLE_MAPPING_JOBS = json.load(reader)
-
 else:
+    print("""WARNING: no jobfile found. Run 'snakemake make_jobfile' to create one.""")
+
+def create_jobfile(wildcards):
     # Combine short contigs for mapping
     SAMPLE_MAPPING_JOBS = {}
     for sn, bamfile in SAMPLES.items():
@@ -73,34 +75,18 @@ else:
         SAMPLE_MAPPING_JOBS[sn] = {"multiple.%s" % (hashlib.md5(" ".join(contigs).encode("utf-8")).hexdigest()): contigs for (contigs, size) in jobs}
         full_jobs_dict = {name: name.split(".") for name in full_jobs}
         SAMPLE_MAPPING_JOBS[sn].update(full_jobs_dict)
-
-    # Write joblist to file
-    with open(JOBFILE, "w") as writer:
-        json.dump(SAMPLE_MAPPING_JOBS, writer)
-
-#def get_sparse_matrices_from_sample(wildcards):
-#    print(wildcards.sample, flush=True)
-#    bam = pysam.AlignmentFile(SAMPLES[wildcards.sample])
-#    contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
-#    bam.close()
-#    regions = ["unmapped"]
-#
-#    for contig, contig_length in contigs.items():
-#        nregions = contig_length // WINDOW_SIZE + 1
-#        coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
-#        regions.extend(["%s.%s" % (contig, x) for x in coords])
-#
-#    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in regions]
+        SAMPLE_MAPPING_JOBS[sn].update({"unmapped": "unmapped"})
+        return SAMPLE_MAPPING_JOBS
 
 def get_sparse_matrices_from_sample(wildcards):
     names = SAMPLE_MAPPING_JOBS[wildcards.sample].keys()
     return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
 
 def get_multiple_contigs(sample, chr, num):
-    names = SAMPLE_MAPPING_JOBS[wildcards.sample]["%s.%s" % (wildcards.chr, wildcards.num)]
-    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
+    names = SAMPLE_MAPPING_JOBS[sample]["%s.%s" % (chr, num)]
+    return ["region_matrices/%s/%s.%s.pkl" % (sample, sample, region) for region in names]
 
-localrules: all, get_headers
+localrules: all, get_headers, make_jobfile
 
 rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())#,
@@ -135,10 +121,12 @@ rule map_and_count_unmapped:
     run:
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
+
         shell(
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
-            "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
+            "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
+            "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "samtools view -h {input[0]} '*' | "
             "python3 chunker.py /dev/stdin --contig unmapped | "
@@ -161,7 +149,6 @@ rule map_and_count:
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
     priority: 20
     run:
-        start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
 
@@ -172,14 +159,16 @@ rule map_and_count:
 
         if wildcards.chr == "multiple":
             contigs = get_multiple_contigs(wildcards.sample, wildcards.chr, wildcards.num)
-            chunker_args = "--contigs %s" % contigs
+            chunker_args = "--contigs %s" % " ".join(contigs)
         else:
+            start, end = wildcards.num.split("_")
             chunker_args = "--contig %s --start %s --end %s" % (wildcards.chr, start, end)
 
         shell(
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
-            "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
+            "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
+            "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
             "python3 chunker.py {input[0]} {chunker_args} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
@@ -207,3 +196,13 @@ rule get_header:
     params: sge_opts = ""
     shell:
         "samtools view -H {input} > {output}"
+
+rule make_jobfile:
+    input: MANIFEST
+    output: JOBFILE
+    params: sge_opts = ""
+    run:
+        sample_mapping_jobs = create_jobfile(wildcards)
+        with open(output[0], "w") as writer:
+            json.dump(sample_mapping_jobs, writer)
+
