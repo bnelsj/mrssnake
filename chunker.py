@@ -26,10 +26,40 @@ def chunk_read(i, read, outfile, chunk_size, write_step = 1000000, line_buffer =
         sys.stderr.write("Chunker: %d reads chunked\n" % i)
         sys.stderr.flush()
 
+def chunk_reads_from_contigs(source_contigs, outfile, args):
+    bamfile = pysam.AlignmentFile(args.bamfile)
+    for contig in source_contigs:
+        fetch_list = get_fetch_list(contig, args.start, args.end)
+
+        msg = "Chunker: Chunking %s reads\n" % " ".join(map(str, fetch_list))
+        sys.stderr.write(msg)
+        try:
+            for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
+                if args.start is not None and read.reference_start < args.start:
+                    continue
+                else:
+                    chunk_read(i, read, outfile, args.chunk_size) 
+            bamfile.close()
+        except BrokenPipeError as e:
+            sys.stdout.write(str(e))
+            sys.stdout.flush()
+            sys.exit(1)
+        except ValueError as e:
+            sys.stdout.write(str(e))
+            sys.stdout.flush()
+            sys.exit(1)
+        finally:
+            bamfile.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("bamfile")
-    parser.add_argument("chr", help="Input bam contig to chunk. Use 'unmapped' to get all unmapped reads.")
+
+    contig_group = parser.add_mutually_exclusive_group(required=True)
+    contig_group.add_argument("--contig", help="Input bam contig to chunk. Use 'unmapped' to get all unmapped reads.")
+    contig_group.add_argument("--contigs", nargs="+", help="List of contigs to chunk")
+
     parser.add_argument("--start", type=int)
     parser.add_argument("--end", type=int)
     parser.add_argument("--outfile", default = "/dev/stdout")
@@ -37,35 +67,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.contig is not None:
+        source_contigs = [args.contig]
+    else:
+        source_contigs = args.contigs
+
     outfile = open(args.outfile, "w")
-    bamfile = pysam.AlignmentFile(args.bamfile)
 
-    fetch_list = get_fetch_list(args.chr, args.start, args.end)
-
-    msg = "Chunker: Chunking %s reads\n" % " ".join(map(str, fetch_list))
-    sys.stderr.write(msg)
-
-    try:
-        if args.chr == "unmapped": # Assumes unmapped reads passed as sam by samtools view "*"
-            for i, read in enumerate(bamfile.fetch(until_eof=True)):
-                chunk_read(i, read, outfile, args.chunk_size)
-        else:
-            for i, read in enumerate(bamfile.fetch(*fetch_list, until_eof=True)):
-                if args.start is not None and read.reference_start < args.start:
-                    continue
-                else:
-                    chunk_read(i, read, outfile, args.chunk_size) 
-        bamfile.close()
-    except BrokenPipeError as e:
-        sys.stdout.write(str(e))
-        sys.stdout.flush()
-        sys.exit(1)
-    except ValueError as e:
-        sys.stdout.write(str(e))
-        sys.stdout.flush()
-        sys.exit(1)
-    finally:
-        bamfile.close()
+    chunk_reads_from_contigs(source_contigs, outfile, args)
 
     #Handle regions where there are no reads
     try:

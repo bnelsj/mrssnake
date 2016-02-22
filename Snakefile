@@ -1,17 +1,23 @@
 import os
+import sys
 import pysam
+import hashlib
+import json
 
 shell.prefix("source config.sh; ")
 
 
 if config == {}:
-    configfile: "config.json"
+    configfile: "config.yaml"
 
 MANIFEST = config["manifest"]
 
 MASKED_REF = config["masked_ref"]
 CONTIGS_FILE = config["contigs"]
 WINDOW_SIZE = config["window_size"]
+
+USE_SOURCE_CONTIGS = config["use_source_contigs_for_array"]
+ARRAY_CONTIGS = config["array_contigs"]
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -30,20 +36,71 @@ with open(MANIFEST, "r") as reader:
         sn, bam = line.rstrip().split()
         SAMPLES[sn] = bam
 
+JOBFILE = config["jobfile"]
+# Load JOBFILE if it exists
+if os.path.exists(JOBFILE):
+    with open(JOBFILE, "r") as reader:
+        SAMPLE_MAPPING_JOBS = json.load(reader)
+
+else:
+    # Combine short contigs for mapping
+    SAMPLE_MAPPING_JOBS = {}
+    for sn, bamfile in SAMPLES.items():
+        bam = pysam.AlignmentFile(bamfile)
+        contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
+        bam.close()
+
+        full_jobs = []
+        jobs = []
+
+        for contig, size in contigs.items():
+            if size >= WINDOW_SIZE:
+                nregions = size // WINDOW_SIZE + 1
+                coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
+                full_jobs.extend(["%s.%s" % (contig, x) for x in coords])
+               
+            if size < WINDOW_SIZE:
+                job_added = False
+                for job in jobs:
+                    if job[1] + size < WINDOW_SIZE:
+                        job[0].append(contig)
+                        job[1] += size
+                        job_added = True
+                        break
+                if not job_added:
+                    jobs.append([[contig], size])
+        (contigs, size) = jobs[0]
+        SAMPLE_MAPPING_JOBS[sn] = {"multiple.%s" % (hashlib.md5(" ".join(contigs).encode("utf-8")).hexdigest()): contigs for (contigs, size) in jobs}
+        full_jobs_dict = {name: name.split(".") for name in full_jobs}
+        SAMPLE_MAPPING_JOBS[sn].update(full_jobs_dict)
+
+    # Write joblist to file
+    with open(JOBFILE, "w") as writer:
+        json.dump(SAMPLE_MAPPING_JOBS, writer)
+
+#def get_sparse_matrices_from_sample(wildcards):
+#    print(wildcards.sample, flush=True)
+#    bam = pysam.AlignmentFile(SAMPLES[wildcards.sample])
+#    contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
+#    bam.close()
+#    regions = ["unmapped"]
+#
+#    for contig, contig_length in contigs.items():
+#        nregions = contig_length // WINDOW_SIZE + 1
+#        coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
+#        regions.extend(["%s.%s" % (contig, x) for x in coords])
+#
+#    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in regions]
+
 def get_sparse_matrices_from_sample(wildcards):
-    bam = pysam.AlignmentFile(SAMPLES[wildcards.sample])
-    contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
-    bam.close()
-    regions = ["unmapped"]
+    names = SAMPLE_MAPPING_JOBS[wildcards.sample].keys()
+    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
 
-    for contig, contig_length in contigs.items():
-        nregions = contig_length // WINDOW_SIZE + 1
-        coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
-        regions.extend(["%s.%s" % (contig, x) for x in coords])
+def get_multiple_contigs(sample, chr, num):
+    names = SAMPLE_MAPPING_JOBS[wildcards.sample]["%s.%s" % (wildcards.chr, wildcards.num)]
+    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
 
-    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in regions]
-
-localrules: all
+localrules: all, get_headers
 
 rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())#,
@@ -70,7 +127,7 @@ rule merge_sparse_matrices:
         shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule map_and_count_unmapped:
-    input: lambda wildcards: SAMPLES[wildcards.sample]
+    input: lambda wildcards: SAMPLES[wildcards.sample], "BAMS_READABLE"
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
     params: sge_opts = "-pe orte 4 -l mfree=40G -N map_unmapped"
     benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
@@ -83,8 +140,8 @@ rule map_and_count_unmapped:
             "mkdir -p /var/tmp/mrsfast_index; "
             "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "samtools view -h {input} '*' | "
-            "python3 chunker.py /dev/stdin unmapped | "
+            "samtools view -h {input[0]} '*' | "
+            "python3 chunker.py /dev/stdin --contig unmapped | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
             )
@@ -98,7 +155,7 @@ rule merge_matrices_live:
         "python3 live_merger.py {output} --infiles {params.files}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample]
+    input: lambda wildcards: SAMPLES[wildcards.sample], "BAMS_READABLE"
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
@@ -107,12 +164,46 @@ rule map_and_count:
         start, end = wildcards.num.split("_")
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
+
+        if (not USE_SOURCE_CONTIGS) and ARRAY_CONTIGS != []:
+            common_contigs = ARRAY_CONTIGS
+        else:
+            common_contigs = wildcards.chr
+
+        if wildcards.chr == "multiple":
+            contigs = get_multiple_contigs(wildcards.sample, wildcards.chr, wildcards.num)
+            chunker_args = "--contigs %s" % contigs
+        else:
+            chunker_args = "--contig %s --start %s --end %s" % (wildcards.chr, start, end)
+
         shell(
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
             "rsync {MASKED_REF}* /var/tmp/mrsfast_index; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "python3 chunker.py {input} {wildcards.chr} --start {start} --end {end} | "
+            "python3 chunker.py {input[0]} {chunker_args} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {wildcards.chr}"
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {common_contigs}"
             )
+
+rule check_bam_files:
+    input: [bam for key, bam in SAMPLES.items()]
+    output: touch("BAMS_READABLE")
+    params: sge_opts = ""
+    run:
+        for bamfile in input:
+            try:
+                test = pysam.AlignmentFile(bamfile)
+            except ValueError as e:
+                print("Error: could not open %s as bam.\n%s\n" % (bamfile, str(e)), file = sys.stderr)
+                sys.exit(1)
+
+rule get_headers:
+    input: expand("bam_headers/{sample}.txt", sample = SAMPLES.keys())
+
+rule get_header:
+    input: lambda wildcards: SAMPLES[wildcards.sample]
+    output: "bam_headers/{sample}.txt"
+    params: sge_opts = ""
+    shell:
+        "samtools view -H {input} > {output}"
