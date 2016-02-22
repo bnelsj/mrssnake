@@ -44,15 +44,16 @@ if os.path.exists(JOBFILE):
 else:
     print("""WARNING: no jobfile found. Run 'snakemake make_jobfile' to create one.""")
 
-def create_jobfile(wildcards):
+def create_jobfile(wildcards, samples):
     # Combine short contigs for mapping
     SAMPLE_MAPPING_JOBS = {}
-    for sn, bamfile in SAMPLES.items():
+    for sn, bamfile in samples.items():
         bam = pysam.AlignmentFile(bamfile)
         contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
         bam.close()
 
         full_jobs = []
+        full_jobs_dict = {}
         jobs = []
 
         for contig, size in contigs.items():
@@ -76,7 +77,7 @@ def create_jobfile(wildcards):
         full_jobs_dict = {name: name.split(".") for name in full_jobs}
         SAMPLE_MAPPING_JOBS[sn].update(full_jobs_dict)
         SAMPLE_MAPPING_JOBS[sn].update({"unmapped": "unmapped"})
-        return SAMPLE_MAPPING_JOBS
+    return SAMPLE_MAPPING_JOBS
 
 def get_sparse_matrices_from_sample(wildcards):
     names = SAMPLE_MAPPING_JOBS[wildcards.sample].keys()
@@ -113,7 +114,7 @@ rule merge_sparse_matrices:
         shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule map_and_count_unmapped:
-    input: lambda wildcards: SAMPLES[wildcards.sample], "BAMS_READABLE"
+    input: lambda wildcards: SAMPLES[wildcards.sample], JOBFILE
     output: "region_matrices/{sample}/{sample}.unmapped.pkl"
     params: sge_opts = "-pe orte 4 -l mfree=40G -N map_unmapped"
     benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
@@ -143,7 +144,7 @@ rule merge_matrices_live:
         "python3 live_merger.py {output} --infiles {params.files}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], "BAMS_READABLE"
+    input: lambda wildcards: SAMPLES[wildcards.sample], JOBFILE
     output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
@@ -202,7 +203,7 @@ rule make_jobfile:
     output: JOBFILE
     params: sge_opts = ""
     run:
-        sample_mapping_jobs = create_jobfile(wildcards)
+        sample_mapping_jobs = create_jobfile(wildcards, SAMPLES)
         with open(output[0], "w") as writer:
             json.dump(sample_mapping_jobs, writer)
 
