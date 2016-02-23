@@ -3,6 +3,7 @@ from __future__ import division
 
 import sys
 import argparse
+import json
 import pysam
 import numpy as np
 
@@ -57,7 +58,10 @@ if __name__ == "__main__":
     contig_group = parser.add_mutually_exclusive_group(required=True)
     contig_group.add_argument("--contig", help="Input bam contig to chunk. Use 'unmapped' to get all unmapped reads.")
     contig_group.add_argument("--contigs", nargs="+", help="List of contigs to chunk")
+    contig_group.add_argument("--contigs_hash", type=str, help="MD5 hash of contigs to include")
 
+    parser.add_argument("--jobfile", help="Jobfile in json format. Required if contigs_hash is specified.")
+    parser.add_argument("--sample", help="Name of sample in jobfile. Required if contigs_hash is specified.")
     parser.add_argument("--start", type=int)
     parser.add_argument("--end", type=int)
     parser.add_argument("--outfile", default = "/dev/stdout")
@@ -67,8 +71,17 @@ if __name__ == "__main__":
 
     if args.contig is not None:
         source_contigs = [args.contig]
-    else:
+    elif args.contigs is not None:
         source_contigs = args.contigs
+    elif args.contigs_hash is not None:
+        if args.jobfile is None:
+            sys.exit("Error: No jobfile specified with contigs_hash.\n")
+        if args.sample is None:
+            sys.exit("Error: No sample specified with contigs_hash.\n")
+
+        fn = open(args.jobfile, "r")
+        jobs = json.load(fn)
+        source_contigs = jobs[args.sample][args.contigs_hash]
 
     outfile = open(args.outfile, "w")
 

@@ -3,9 +3,9 @@ import sys
 import pysam
 import hashlib
 import json
+from MappingJob import *
 
 shell.prefix("source config.sh; ")
-
 
 if config == {}:
     configfile: "config.yaml"
@@ -48,7 +48,10 @@ def create_jobfile(wildcards, samples):
     # Combine short contigs for mapping
     SAMPLE_MAPPING_JOBS = {}
     for sn, bamfile in samples.items():
-        bam = pysam.AlignmentFile(bamfile)
+        try:
+            bam = pysam.AlignmentFile(bamfile)
+        except ValueError as e:
+            print("Error: Can't open %s" % bamfile, file=sys.stderr)
         contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
         bam.close()
 
@@ -160,7 +163,8 @@ rule map_and_count:
 
         if wildcards.chr == "multiple":
             contigs = get_multiple_contigs(wildcards.sample, wildcards.chr, wildcards.num)
-            chunker_args = "--contigs %s" % " ".join(contigs)
+            #chunker_args = "--contigs %s" % " ".join(contigs)
+            chunker_args = "--contigs_hash %s --jobfile %s --sample" % (wildcards.num, input[1], wildcards.sample)
         else:
             start, end = wildcards.num.split("_")
             chunker_args = "--contig %s --start %s --end %s" % (wildcards.chr, start, end)
