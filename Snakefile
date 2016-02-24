@@ -163,8 +163,7 @@ rule map_and_count:
 
         if wildcards.chr == "multiple":
             contigs = get_multiple_contigs(wildcards.sample, wildcards.chr, wildcards.num)
-            #chunker_args = "--contigs %s" % " ".join(contigs)
-            chunker_args = "--contigs_hash %s --jobfile %s --sample" % (wildcards.num, input[1], wildcards.sample)
+            chunker_args = "--contigs_hash %s --jobfile %s --sample %s" % (wildcards.num, input[1], wildcards.sample)
         else:
             start, end = wildcards.num.split("_")
             chunker_args = "--contig %s --start %s --end %s" % (wildcards.chr, start, end)
