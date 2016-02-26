@@ -3,10 +3,10 @@ reference: hg19
 manifest: manifest.txt
 
 hg19:
-    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/mrsfastULTRA/hg19_masked
+    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked
     contigs: ~psudmant/genomes/contigs/hg19_contigs.txt
 hg38:
-    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg38/read_depth/illumina/hg38.rmsk_and_trf.fa
+    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfastULTRA/hg38.rmsk_and_trf.fa
     contigs: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfast_hg38/hg38_contigs.tab
 custom_contig:
     masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
