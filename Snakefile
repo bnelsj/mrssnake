@@ -4,6 +4,7 @@ import pysam
 import hashlib
 import json
 from MappingJob import *
+from subprocess import CalledProcessError
 
 shell.prefix("source config.sh; ")
 
@@ -44,9 +45,10 @@ if os.path.exists(JOBFILE):
 else:
     print("""WARNING: no jobfile found. Run 'snakemake make_jobfile' to create one.""")
 
-def create_jobfile(wildcards, samples):
+def create_jobdict(wildcards, samples):
     # Combine short contigs for mapping
     SAMPLE_MAPPING_JOBS = {}
+    unique_contig_dicts = {}
     for sn, bamfile in samples.items():
         try:
             bam = pysam.AlignmentFile(bamfile)
@@ -54,7 +56,18 @@ def create_jobfile(wildcards, samples):
             print("Error: Can't open %s" % bamfile, file=sys.stderr)
         contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
         bam.close()
-
+        print(sn, flush=True)
+        unique = True
+        for sample, contigs_dict in unique_contig_dicts.items():
+            if contigs == contigs_dict:
+                SAMPLE_MAPPING_JOBS[sn] = SAMPLE_MAPPING_JOBS[sample]
+                unique = False
+                break
+        if unique:
+            unique_contig_dicts[sn] = contigs
+        else:
+            continue
+        print("Processing sample %s" % sn, flush=True)
         full_jobs = []
         full_jobs_dict = {}
         jobs = []
@@ -80,6 +93,7 @@ def create_jobfile(wildcards, samples):
         full_jobs_dict = {name: name.split(".") for name in full_jobs}
         SAMPLE_MAPPING_JOBS[sn].update(full_jobs_dict)
         SAMPLE_MAPPING_JOBS[sn].update({"unmapped": "unmapped"})
+    print(len(unique_contig_dicts), unique_contig_dicts.keys())
     return SAMPLE_MAPPING_JOBS
 
 def get_sparse_matrices_from_sample(wildcards):
@@ -202,11 +216,23 @@ rule get_header:
         "samtools view -H {input} > {output}"
 
 rule make_jobfile:
-    input: MANIFEST
+    input: MANIFEST, "MRSFASTULTRA_INDEXED"
     output: JOBFILE
+    params: sge_opts = "", samples = SAMPLES, window_size = WINDOW_SIZE
+    benchmark: "benchmarks/jobfile/jobfile.json"
+    script:
+        "create_jobfile.py"
+#    run:
+#        sample_mapping_jobs = create_jobdict(wildcards, SAMPLES)
+#        with open(output[0], "w") as writer:
+#            json.dump(sample_mapping_jobs, writer)
+
+rule check_index:
+    input: MASKED_REF
+    output: touch("MRSFASTULTRA_INDEXED"), temp(".mrsfast_index_test_output.txt")
     params: sge_opts = ""
     run:
-        sample_mapping_jobs = create_jobfile(wildcards, SAMPLES)
-        with open(output[0], "w") as writer:
-            json.dump(sample_mapping_jobs, writer)
-
+        try:
+            shell("mrsfast --search {input[0]} --seq dummy.fq > {output[1]}")
+        except CalledProcessError as e:
+            sys.exit("Reference %s was not indexed with the current version of mrsfastULTRA. Please reindex." % input[0])
