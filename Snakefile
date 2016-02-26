@@ -12,9 +12,9 @@ if config == {}:
     configfile: "config.yaml"
 
 MANIFEST = config["manifest"]
-
-MASKED_REF = config["masked_ref"]
-CONTIGS_FILE = config["contigs"]
+REFERENCE = config["reference"]
+MASKED_REF = config[REFERENCE]["masked_ref"]
+CONTIGS_FILE = config[REFERENCE]["contigs"]
 WINDOW_SIZE = config["window_size"]
 
 USE_SOURCE_CONTIGS = config["use_source_contigs_for_array"]
