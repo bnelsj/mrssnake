@@ -4,7 +4,7 @@ manifest: manifest.txt
 
 hg19:
     masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked
-    contigs: ~psudmant/genomes/contigs/hg19_contigs.txt
+    contigs: /net/eichler/vol7/home/psudmant/genomes/contigs/hg19_contigs.txt
 hg38:
     masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfastULTRA/hg38.rmsk_and_trf.fa
     contigs: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfast_hg38/hg38_contigs.tab
