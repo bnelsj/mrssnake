@@ -70,7 +70,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.contig is not None:
-        source_contigs = [args.contig]
+        if args.contig == "unmapped":
+            source_contigs = [""]
+        else:
+            source_contigs = [args.contig]
     elif args.contigs is not None:
         source_contigs = args.contigs
     elif args.contigs_hash is not None:
