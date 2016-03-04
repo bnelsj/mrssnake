@@ -35,17 +35,31 @@ THE SOFTWARE.
 
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <math.h>
+#include <vector>
 #include <cmath>
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
+#include "htslib/hts.h"
+#include "htslib/bgzf.h"
+#include "htslib/sam.h"
 
+#define HTS_FMT_BAI 1
 
+struct interval
+{
+    int64_t start,end;
+};
 
 struct options{
    std::string file;
+   int part;
+   int nparts;
+   int chunk_size;
 }globalOpts;
 
 static const char *optString = "b:p:n:c";
@@ -55,23 +69,32 @@ int parseOpts(int argc, char** argv)
     {
     int opt = 0;
     globalOpts.file = "NA";
+	globalOpts.chunk_size = 36;
     opt = getopt(argc, argv, optString);
     while(opt != -1){
 	switch(opt){
+		case 'h':
+		{
+		 std::cerr << "Useage" << std::endl;
+		}
 		case 'b':
 		{
+		 globalOpts.file = optarg;
 		 break;
 		}
 		case 'p':
 		{
+		 globalOpts.part = atoi(optarg);
 		 break;
 		}
 		case 'n':
 		{
+		 globalOpts.nparts = atoi(optarg);
 		 break;
 		}
 		case 'c':
 		{
+		 globalOpts.chunk_size = atoi(optarg);
 		 break;
 		}
 		case '?':
@@ -84,6 +107,168 @@ int parseOpts(int argc, char** argv)
    }
 return 1;
 }
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : options
+
+ Function does   : get number of blocks in file, calculate start and end block from part and nparts
+
+ Function returns: start and end positions
+
+*/
+
+struct interval bin_2_pos(int bin_id)
+{
+    struct interval i;
+    i.start = 0;
+    i.end = 0;
+
+    if (bin_id == 0) {
+        i.start = 1;
+        i.end = pow(2,29);
+    } else if (bin_id <= 8) {
+        i.start = (bin_id - 1) * pow(2,26);
+        i.end = i.start + pow(2,26);
+    } else if (bin_id <= 72) {
+        i.start = (bin_id - 8) * pow(2,23);
+        i.end = i.start + pow(2,23);
+    } else if (bin_id <= 584) {
+        i.start = (bin_id - 72) * pow(2,20);
+        i.end = i.start + pow(2,20);
+    } else if (bin_id <= 4680) {
+        i.start = (bin_id - 584) * pow(2,17);
+        i.end = i.start + pow(2,17);
+    } 
+
+    return i;
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : nchunks in bam, partition number, total number of partitions
+
+ Function does   : calculates start and end chunk to parse
+
+ Function returns: half-open chunk interval for given partition
+
+*/
+
+std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks, int part, int nparts) {
+	struct interval chunk_range;
+	int range_size;
+	int nchunks = chunks.size();
+
+	range_size = chunks.size() / nparts;
+	chunk_range.start = range_size * part;
+	part == nparts-1 ? chunk_range.end = nchunks : chunk_range.end = range_size * part + range_size;
+	
+	//chunk_range.end = range_size * part + range_size;
+	
+	std::vector<struct interval> chunks_to_read(&chunks[chunk_range.start], &chunks[chunk_range.end]);
+
+	return chunks_to_read;
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : options
+
+ Function does   : get number of blocks in file, calculate start and end block from part and nparts
+
+ Function returns: start and end positions
+
+*/
+
+int read_index(std::string fn, int part, int nparts) {
+	const char *file_name = fn.c_str();
+	long chunk_counter=0;
+	FILE *ptr_myfile;
+	std::vector <struct interval> chunks_to_read;
+	std::vector <struct interval> chunks;
+
+	ptr_myfile = fopen(file_name,"rb");
+
+	if(!ptr_myfile) {
+		std::cerr << "Unable to open file." << std::endl;
+		exit(1);
+	}
+
+	char magic[4];
+	fread(&magic, sizeof(char), 4, ptr_myfile);	
+	printf("magic:%s\n",magic);
+
+    int32_t n_ref;
+    fread(&n_ref,sizeof(int32_t),1,ptr_myfile);
+    printf("n_ref:%d\n",n_ref);
+
+    int32_t n_bin;
+    fread(&n_bin,sizeof(int32_t),1,ptr_myfile);
+    printf("n_bin:%d\n",n_bin);
+
+	int32_t i;
+    for (i = 0; i < n_bin; ++i) {
+        uint32_t bin; 
+        fread(&bin,sizeof(uint32_t),1,ptr_myfile);
+        struct interval region = bin_2_pos(bin);
+        //printf("bin:%d\tstart:%u\tend:%u\t", bin, region.start, region.end);
+
+        int32_t n_chunk;
+        fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
+		chunk_counter += n_chunk;
+        //printf("n_chunk:%d\n",n_chunk);
+        int32_t j;
+        for (j = 0; j < n_chunk; ++j) {
+            int64_t chunk_beg, chunk_end;
+			struct interval tmp;
+            fread(&chunk_beg,sizeof(int64_t),1,ptr_myfile);
+            fread(&chunk_end,sizeof(int64_t),1,ptr_myfile);
+
+			tmp.start = chunk_beg;
+			tmp.end = chunk_end;
+			chunks.push_back(tmp);		
+//            printf("chunk_beg:%llu chunk_end:%llu size:%llu\n",
+//                        chunk_beg,
+//                        chunk_end,
+//                        (chunk_end-chunk_beg));
+        }
+
+    }
+	printf("Total chunks: %d\n", chunk_counter);
+	chunks_to_read = get_chunk_range(chunks, part, nparts);	
+	fclose(ptr_myfile);
+	//printf("First chunk: %d, last chunk: %d, total chunks: %d\n", chunk_range.start, chunk_range.end, chunk_range.end - chunk_range.start + 1);
+	printf("Vector size: %d\n", chunks.size());
+	printf("Chunks to read: %d\n", chunks_to_read.size());
+	
+	//for(int i=0; i < chunks_to_read.size(); ++i) {
+	//	printf("%llu %llu\n", chunks_to_read[i].start, chunks_to_read[i].end);
+	//}
+	
+    return 0;
+
+}
+
+//------------------------------- SUBROUTINE --------------------------------
+/*
+ Function input  : options
+
+ Function does   : get number of blocks in file, calculate start and end block from part and nparts
+
+ Function returns: start and end positions
+
+*/
+//hts_idx_t get_positions(options globalOpts)
+//{
+//    BGZF * fp;
+//    hts_idx_t *idx;
+
+    //    fp = bgzf_open(globalOpts.file.c_str(), "r");
+    
+    //    idx = hts_index_load(globalOpts.file.c_str(), HTS_FMT_BAI);
+
+//    return(idx);
+//}
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  :
@@ -93,10 +278,20 @@ return 1;
  Function returns:
 
 */
-void sub()
+/*
+std::string chunk_read(std::string &read, int chunk_size)
 {
-}
+	std::stringstream stream;
+	int n_to_do = read->length / chunk_size;
 
+    for(i = 0; i < n_to_do; i++){
+        stream << ">0" << std::endl;
+        stream << read->seq[i*chunk_size : i*chunk_size + chunk_size] << std::endl;
+    }
+
+    return stream;
+}
+*/
 //-------------------------------    MAIN     --------------------------------
 /*
  Comments:
@@ -104,7 +299,52 @@ void sub()
 
 int main( int argc, char** argv)
 {
-int parse = parseOpts(argc, argv);
 
-return 0;
+    globalOpts.chunk_size = 36;
+	globalOpts.part = -1;
+	globalOpts.nparts = -1;
+
+    int parse = parseOpts(argc, argv);
+
+    if (globalOpts.part == -1) {
+        std::cerr << "Error: no partition specified" << std::endl;
+        exit(1);
+    }
+
+     if (globalOpts.nparts == -1) {
+        std::cerr << "Error: number of partitions not specified" << std::endl;
+        exit(1);
+    }
+
+	if (!(globalOpts.part < globalOpts.nparts)) {
+		std::cerr << "Error: partition number must be less than total number of partitions (Partition numbers are 0-based)" << std::endl;
+		exit(1);
+	}
+
+    if (globalOpts.file.empty()) {
+        std::cerr << "Error: no bam file provided" << std::endl;
+		exit(1);
+    }
+
+	samFile *in = sam_open(globalOpts.file.c_str(), "r");
+	if(in == NULL) {
+    	std::cerr << "Unable to open BAM/SAM file." << std::endl;
+		exit(1);
+    }
+	hts_idx_t *idx = sam_index_load(in, globalOpts.file.c_str());
+
+	read_index(globalOpts.file + ".bai", globalOpts.part, globalOpts.nparts);
+
+    //    idx = get_positions(globalOpts);
+//    std::cout << idx << std::endl;   
+// Get index from bamfile
+// Open index
+// Get total chunks
+// Calculate start_pos and end_pos
+// Get offset of start_pos and end_pos
+// Seek to start_pos
+   // Chunk reads
+// Read until end_pos
+
+    return 0;
 }
