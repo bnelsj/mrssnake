@@ -34,6 +34,7 @@ THE SOFTWARE.
 */
 
 #include <string>
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <math.h>
@@ -53,6 +54,10 @@ THE SOFTWARE.
 struct interval
 {
     int64_t start,end;
+	bool operator < (const interval& other) const
+	{
+		return (start < other.start);
+	}
 };
 
 struct options{
@@ -108,40 +113,10 @@ int parseOpts(int argc, char** argv)
 return 1;
 }
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : options
-
- Function does   : get number of blocks in file, calculate start and end block from part and nparts
-
- Function returns: start and end positions
-
-*/
-
-struct interval bin_2_pos(int bin_id)
-{
-    struct interval i;
-    i.start = 0;
-    i.end = 0;
-
-    if (bin_id == 0) {
-        i.start = 1;
-        i.end = pow(2,29);
-    } else if (bin_id <= 8) {
-        i.start = (bin_id - 1) * pow(2,26);
-        i.end = i.start + pow(2,26);
-    } else if (bin_id <= 72) {
-        i.start = (bin_id - 8) * pow(2,23);
-        i.end = i.start + pow(2,23);
-    } else if (bin_id <= 584) {
-        i.start = (bin_id - 72) * pow(2,20);
-        i.end = i.start + pow(2,20);
-    } else if (bin_id <= 4680) {
-        i.start = (bin_id - 584) * pow(2,17);
-        i.end = i.start + pow(2,17);
-    } 
-
-    return i;
+inline void initKstring(kstring_t * k){
+  k->m = 0;
+  k->l = 0;
+  k->s = 0;
 }
 
 //------------------------------- SUBROUTINE --------------------------------
@@ -172,6 +147,57 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  : Vector of virtual offset intervals, bamfile
+
+ Function does   : Iterate over vector, seek to start of interval and read to end
+
+ Function returns: 0 if successful, 1 otherwise
+
+*/
+int get_reads(std::vector<struct interval> &chunks, std::string bamfile)
+{
+	BGZF* bam;
+	
+	kstring_t tmp, seq;
+	initKstring(&tmp);
+	initKstring(&seq);
+	int seek;
+	if(bgzf_is_bgzf == 0) {
+		std::cerr << "Error: file is not in BGZF format." << std::endl;
+		exit(1);
+	}
+	bam = bgzf_open(bamfile.c_str(), "r");
+	// Get BGZF file handle
+
+    for(int i = 0; i < chunks.size(); i++){
+		int state = 1;
+		seek = bgzf_seek(bam, chunks[i].start, 0);
+		if(seek != 0) {
+			std::cerr << "Error: could not seek to position " << chunks[i].start << "." << std::endl;
+			exit(1);
+		}
+		std::cout << "Going to position " << chunks[i].start << " " << chunks[i].end << std::endl;
+
+		while(state > 0 and state < chunks[i].end) {
+		//	for(int j =0; j < 9; j++) {
+		//		state = bgzf_getline(bam, '\t', &tmp);
+		//	}
+			state = bgzf_getline(bam, '\n', &seq);
+		//	state = bgzf_getline(bam, '\n', &tmp);
+
+			std::cout << seq.s << std::endl;
+		}
+		
+		//Seek to offset
+		//Read until end
+			//Split reads
+    }
+	bgzf_close(bam);
+
+    return 0;
+}
+//------------------------------- SUBROUTINE --------------------------------
+/*
  Function input  : options
 
  Function does   : get number of blocks in file, calculate start and end block from part and nparts
@@ -180,14 +206,14 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
 
 */
 
-int read_index(std::string fn, int part, int nparts) {
-	const char *file_name = fn.c_str();
+std::vector<struct interval> read_index(std::string fn, int part, int nparts) {
+	const char * file_name = fn.c_str();
+	std::string index_name = fn + ".bai";
 	long chunk_counter=0;
 	FILE *ptr_myfile;
-	std::vector <struct interval> chunks_to_read;
-	std::vector <struct interval> chunks;
+	std::vector <struct interval> chunks, chunks_to_read;
 
-	ptr_myfile = fopen(file_name,"rb");
+	ptr_myfile = fopen(index_name.c_str(),"rb");
 
 	if(!ptr_myfile) {
 		std::cerr << "Unable to open file." << std::endl;
@@ -210,13 +236,10 @@ int read_index(std::string fn, int part, int nparts) {
     for (i = 0; i < n_bin; ++i) {
         uint32_t bin; 
         fread(&bin,sizeof(uint32_t),1,ptr_myfile);
-        struct interval region = bin_2_pos(bin);
-        //printf("bin:%d\tstart:%u\tend:%u\t", bin, region.start, region.end);
 
         int32_t n_chunk;
         fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
 		chunk_counter += n_chunk;
-        //printf("n_chunk:%d\n",n_chunk);
         int32_t j;
         for (j = 0; j < n_chunk; ++j) {
             int64_t chunk_beg, chunk_end;
@@ -227,48 +250,22 @@ int read_index(std::string fn, int part, int nparts) {
 			tmp.start = chunk_beg;
 			tmp.end = chunk_end;
 			chunks.push_back(tmp);		
-//            printf("chunk_beg:%llu chunk_end:%llu size:%llu\n",
-//                        chunk_beg,
-//                        chunk_end,
-//                        (chunk_end-chunk_beg));
         }
 
     }
 	printf("Total chunks: %d\n", chunk_counter);
 	chunks_to_read = get_chunk_range(chunks, part, nparts);	
 	fclose(ptr_myfile);
-	//printf("First chunk: %d, last chunk: %d, total chunks: %d\n", chunk_range.start, chunk_range.end, chunk_range.end - chunk_range.start + 1);
 	printf("Vector size: %d\n", chunks.size());
 	printf("Chunks to read: %d\n", chunks_to_read.size());
-	
-	//for(int i=0; i < chunks_to_read.size(); ++i) {
-	//	printf("%llu %llu\n", chunks_to_read[i].start, chunks_to_read[i].end);
-	//}
-	
-    return 0;
 
+
+	return chunks_to_read;
+	
 }
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  : options
 
- Function does   : get number of blocks in file, calculate start and end block from part and nparts
 
- Function returns: start and end positions
-
-*/
-//hts_idx_t get_positions(options globalOpts)
-//{
-//    BGZF * fp;
-//    hts_idx_t *idx;
-
-    //    fp = bgzf_open(globalOpts.file.c_str(), "r");
-    
-    //    idx = hts_index_load(globalOpts.file.c_str(), HTS_FMT_BAI);
-
-//    return(idx);
-//}
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  :
@@ -303,7 +300,7 @@ int main( int argc, char** argv)
     globalOpts.chunk_size = 36;
 	globalOpts.part = -1;
 	globalOpts.nparts = -1;
-
+	std::vector<struct interval> chunks_to_read;
     int parse = parseOpts(argc, argv);
 
     if (globalOpts.part == -1) {
@@ -333,7 +330,8 @@ int main( int argc, char** argv)
     }
 	hts_idx_t *idx = sam_index_load(in, globalOpts.file.c_str());
 
-	read_index(globalOpts.file + ".bai", globalOpts.part, globalOpts.nparts);
+	chunks_to_read = read_index(globalOpts.file, globalOpts.part, globalOpts.nparts);
+	int result = get_reads(chunks_to_read, globalOpts.file.c_str());	
 
     //    idx = get_positions(globalOpts);
 //    std::cout << idx << std::endl;   
