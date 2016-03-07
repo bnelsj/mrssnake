@@ -178,7 +178,7 @@ int get_reads(std::vector<interval> & chunks,
     kstring_t seq = {0,0,NULL};
 
     
-    int32_t r,refID, pos, lseq;
+    int32_t r,refID, pos, lseq, nextRefID;
     uint32_t bin_mq_nl, flag_nc;
     
     
@@ -190,17 +190,16 @@ int get_reads(std::vector<interval> & chunks,
     bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
     bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
     bgzf_read(bam, &lseq,      sizeof(lseq));
+    bgzf_read(bam, &nextRefID,      sizeof(nextRefID));
 
 
-    std::cerr << "remaining " << r     << std::endl;
-    std::cerr << "refID:    " << refID << std::endl;
-    std::cerr << "pos:    " << pos   << std::endl;
-    std::cerr << "lseq:    " << lseq   << std::endl;
+    std::cerr << "remaining: " << r     << std::endl;
+    std::cerr << "refID:     " << refID << std::endl;
+    std::cerr << "pos:       " << pos   << std::endl;
+    std::cerr << "lseq:      " << lseq   << std::endl;
+    std::cerr << "nextrefID: " << nextRefID << std::endl;
+
     
-
- //  bgzf_getline(bam, 10, &seq);
-
-    // std::cerr << seq.s << std::endl;
 
   }
    bgzf_close(bam);
