@@ -178,26 +178,41 @@ int get_reads(std::vector<interval> & chunks,
     kstring_t seq = {0,0,NULL};
 
     
-    int32_t r,refID, pos, lseq, nextRefID;
+    int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
     uint32_t bin_mq_nl, flag_nc;
     
     
-
+    
+    std::cerr << sizeof(char) << std::endl;
 
     bgzf_read(bam, &r,         sizeof(r));
     bgzf_read(bam, &refID,     sizeof(refID));
     bgzf_read(bam, &pos,       sizeof(pos));
     bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
     bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
-    bgzf_read(bam, &lseq,      sizeof(lseq));
-    bgzf_read(bam, &nextRefID,      sizeof(nextRefID));
+    
+    
+    
 
+    uint32_t test ;
+    test << 16 |flag_nc;
+    
+
+    bgzf_read(bam, &lseq,      sizeof(lseq));
+    bgzf_read(bam, &nextRefID, sizeof(nextRefID));
+    bgzf_read(bam, &nextPos,   sizeof(nextPos));
+    bgzf_read(bam, &tlen,      sizeof(tlen));
+    char readName[lseq];
+    bgzf_read(bam, readName,      sizeof(char)*lseq);
+   
 
     std::cerr << "remaining: " << r     << std::endl;
     std::cerr << "refID:     " << refID << std::endl;
     std::cerr << "pos:       " << pos   << std::endl;
     std::cerr << "lseq:      " << lseq   << std::endl;
     std::cerr << "nextrefID: " << nextRefID << std::endl;
+    std::cerr << "nextPos  : " << nextPos << std::endl;
+    std::cerr << "Readname  : " << readName << std::endl;
 
     
 
