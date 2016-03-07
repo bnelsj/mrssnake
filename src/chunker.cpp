@@ -52,6 +52,9 @@ THE SOFTWARE.
 
 #define HTS_FMT_BAI 1
 
+const char* const BAM_DNA_LOOKUP = "=ACMGRSVTWYHKDBN";
+#define bam_seqi(s, i) ((s)[(i)>>1] >> ((~(i)&1)<<2) & 0xf)
+
 struct interval
 {
   uint64_t start, end;
@@ -179,7 +182,7 @@ int get_reads(std::vector<interval> & chunks,
 
     
     int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
-    uint32_t bin_mq_nl, flag_nc;
+    uint32_t bin_mq_nl, flag_nc, flag;
     
     
     
@@ -190,12 +193,10 @@ int get_reads(std::vector<interval> & chunks,
     bgzf_read(bam, &pos,       sizeof(pos));
     bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
     bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
-    
-    
-    
 
-    uint32_t test ;
-    test << 16 |flag_nc;
+    uint32_t test, cigar_ops;
+    test = flag_nc >> 16;
+	cigar_ops = flag_nc & 0xFFFF;
     
 
     bgzf_read(bam, &lseq,      sizeof(lseq));
@@ -203,8 +204,14 @@ int get_reads(std::vector<interval> & chunks,
     bgzf_read(bam, &nextPos,   sizeof(nextPos));
     bgzf_read(bam, &tlen,      sizeof(tlen));
     char readName[lseq];
-    bgzf_read(bam, readName,      sizeof(char)*lseq);
-   
+    bgzf_read(bam, readName,   sizeof(char)*lseq);
+	uint32_t cigar[cigar_ops];
+    bgzf_read(bam, cigar,      sizeof(uint32_t)*cigar_ops);
+    uint8_t seqa[(lseq+1)/2];
+    bgzf_read(bam, seqa,       sizeof(uint8_t)*(lseq+1)/2);
+    
+    char seqASCII[lseq];
+	for (int i = 0; i < (lseq+1)/2; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
 
     std::cerr << "remaining: " << r     << std::endl;
     std::cerr << "refID:     " << refID << std::endl;
@@ -213,7 +220,10 @@ int get_reads(std::vector<interval> & chunks,
     std::cerr << "nextrefID: " << nextRefID << std::endl;
     std::cerr << "nextPos  : " << nextPos << std::endl;
     std::cerr << "Readname  : " << readName << std::endl;
-
+	std::cerr << "Flag: " << test << ", cigar_ops: " << cigar_ops << std::endl;
+    std::cerr << "Cigar: " << cigar << std::endl;
+    std::cerr << "Seq: " << seqASCII << std::endl;
+    
     
 
   }
