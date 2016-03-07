@@ -54,7 +54,7 @@ THE SOFTWARE.
 
 struct interval
 {
-  int64_t start, end;
+  uint64_t start, end;
   bool operator < (const interval& other) const
   {
     return (start < other.start);
@@ -154,42 +154,57 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
  Function returns: 0 if successful, 1 otherwise
 
 */
-int get_reads(std::vector<struct interval> & chunks, 
+int get_reads(std::vector<interval> & chunks, 
 	      std::string bamfile){
+  
   BGZF* bam;
-  kstring_t tmp, seq;
-  initKstring(&tmp);
-  initKstring(&seq);
-  int seek;
-  if(bgzf_is_bgzf == 0) {
-    std::cerr << "Error: file is not in BGZF format." << std::endl;
-    exit(1);
-  }
   bam = bgzf_open(bamfile.c_str(), "r");
+  
+  int index = 0;
+  for(std::vector<interval>::iterator it = chunks.begin(); 
+      it != chunks.end(); it++){
+    
+    index+= 1;
+    
+    if(index > 20){
+      break;
+    }
+    
+    if(bgzf_seek(bam, it->start, 0) == -1){
+      std::cerr << "Error could not seek. " << std::endl;
+      exit(1);
+    }
+
+    kstring_t seq = {0,0,NULL};
+
+    
+    int32_t r,refID, pos, lseq;
+    uint32_t bin_mq_nl, flag_nc;
+    
     
 
-  uint64_t of = 543039114950783;
 
-  if(bgzf_seek(bam, of, 0) == -1){
-    std::cerr << "Error could not seek. " << std::endl;
-    exit(1);
-  }
-  if(bgzf_getline(bam, '\n', &seq)){
-    
-    std::cerr << seq.s << std::endl;
-    
-  }
-  if(bgzf_getline(bam, '\n', &seq)){
-    std::cerr << seq.s << std::endl;
-  }
-  if(bgzf_getline(bam, '\n', &seq)){
-    std::cerr << seq.s << std::endl;
-  }
-  if(bgzf_getline(bam, '\n', &seq)){
-    std::cerr << seq.s << std::endl;
-  }
+    bgzf_read(bam, &r,         sizeof(r));
+    bgzf_read(bam, &refID,     sizeof(refID));
+    bgzf_read(bam, &pos,       sizeof(pos));
+    bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
+    bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
+    bgzf_read(bam, &lseq,      sizeof(lseq));
 
-  bgzf_close(bam);
+
+    std::cerr << "remaining " << r     << std::endl;
+    std::cerr << "refID:    " << refID << std::endl;
+    std::cerr << "pos:    " << pos   << std::endl;
+    std::cerr << "lseq:    " << lseq   << std::endl;
+    
+
+ //  bgzf_getline(bam, 10, &seq);
+
+    // std::cerr << seq.s << std::endl;
+
+  }
+   bgzf_close(bam);
+ 
 }
   
 //------------------------------- SUBROUTINE --------------------------------
@@ -202,9 +217,10 @@ int get_reads(std::vector<struct interval> & chunks,
 
 */
 
-void read_index(std::vector<struct interval> & chunks, 
-		std::string fn, int part, int nparts) {
-  const char * file_name = fn.c_str();
+void read_index(std::vector<interval> & chunks, 
+		std::string & fn) {
+ 
+ const char * file_name = fn.c_str();
   std::string index_name = fn + ".bai";
   long chunk_counter=0;
   FILE *ptr_myfile;
@@ -230,7 +246,7 @@ void read_index(std::vector<struct interval> & chunks,
     
     int32_t n_bin;
     fread(&n_bin,sizeof(int32_t),1,ptr_myfile);
-    printf("n_bin:%d\n",n_bin);
+    printf(" n_bin:%lli\n",n_bin);
     
     int32_t i;
     for (i = 0; i < n_bin; ++i) {
@@ -239,26 +255,37 @@ void read_index(std::vector<struct interval> & chunks,
       
       int32_t n_chunk;
       fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
-      chunk_counter += n_chunk;
+      printf("  n_chunk:%lli\n",n_chunk);
+      
       int32_t j;
       for (j = 0; j < n_chunk; ++j) {
-	int64_t chunk_beg, chunk_end;
+	uint64_t chunk_beg, chunk_end;
 	interval tmp;
-	fread(&chunk_beg,sizeof(int64_t),1,ptr_myfile);
-	fread(&chunk_end,sizeof(int64_t),1,ptr_myfile);
-		
+	fread(&chunk_beg,sizeof(uint64_t),1,ptr_myfile);
+	fread(&chunk_end,sizeof(uint64_t),1,ptr_myfile);
+
+	printf ( " offset %llu\n ", chunk_beg ) ;
+
 	tmp.start = chunk_beg;
 	tmp.end = chunk_end;
 	chunks.push_back(tmp);		
       }
     }
+    int32_t n_intv;
+    fread(&n_intv,sizeof(int32_t),1,ptr_myfile);
+    
+    int32_t k; uint64_t ioffset;
+    for(k = 0; k < n_intv; ++k){
+      fread(&ioffset,sizeof(uint64_t),1,ptr_myfile);
+    } 
   }
-  printf("Total chunks: %d\n", chunk_counter);
-  // chunks_to_read = get_chunk_range(chunks, part, nparts);	
-  fclose(ptr_myfile);
-  printf("Vector size: %d\n", chunks.size());
-  printf("Chunks to read: %d\n", chunks.size());
-  
+
+  uint64_t unmapped;
+  fread(&unmapped, sizeof(uint64_t),1, ptr_myfile);
+  std::cout << "unmapped " << unmapped << std::endl;
+
+ 
+  fclose(ptr_myfile); 
 }
 
 
@@ -293,42 +320,18 @@ std::string chunk_read(std::string &read, int chunk_size)
 
 int main( int argc, char** argv)
 {
-  globalOpts.chunk_size = 36;
-  globalOpts.part = -1;
-  globalOpts.nparts = -1;
+     
   int parse = parseOpts(argc, argv);
-  
-  if (globalOpts.part == -1) {
-    std::cerr << "Error: no partition specified" << std::endl;
-    exit(1);
-  } 
-  if (globalOpts.nparts == -1) {
-    std::cerr << "Error: number of partitions not specified" << std::endl;
-    exit(1);
-  }  
-  if (!(globalOpts.part < globalOpts.nparts)) {
-    std::cerr << "Error: partition number must be less than total number of partitions (Partition numbers are 0-based)" << std::endl;
-    exit(1);
-  }
-  
-  if (globalOpts.file.empty()) {
-    std::cerr << "Error: no bam file provided" << std::endl;
-    exit(1);
-  }
-  
-  samFile *in = sam_open(globalOpts.file.c_str(), "r");
-  if(in == NULL) {
-    std::cerr << "Unable to open BAM/SAM file." << std::endl;
+  if(parse != 1){
+    std::cerr << "FATAL: unable to parse command line correctly." << std::endl;
     exit(1);
   }
 
-  hts_idx_t *idx = sam_index_load(in, globalOpts.file.c_str());
-  
-  std::vector<interval> chunks_to_read;
+ std::vector<interval> idx;
 
-  read_index(chunks_to_read, globalOpts.file, 
-	     globalOpts.part, globalOpts.nparts);
-  int result = get_reads(chunks_to_read, globalOpts.file.c_str());
-  
+ read_index(idx, globalOpts.file);
+
+ get_reads(idx, globalOpts.file);
+    
   return 0;
 }
