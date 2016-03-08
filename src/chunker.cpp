@@ -46,13 +46,15 @@ THE SOFTWARE.
 #include <stdint.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <sstream>
 #include "htslib/hts.h"
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
 
 #define HTS_FMT_BAI 1
 
-const char* const BAM_DNA_LOOKUP = "=ACMGRSVTWYHKDBN";
+const char* const BAM_DNA_LOOKUP   = "=ACMGRSVTWYHKDBN";
+const char* const BAM_CIGAR_LOOKUP = "MIDNSHP=X";
 #define bam_seqi(s, i) ((s)[(i)>>1] >> ((~(i)&1)<<2) & 0xf)
 
 struct interval
@@ -178,62 +180,90 @@ int get_reads(std::vector<interval> & chunks,
 	  exit(1);
 	}
 	std::cerr << it->start << " " << it->end << std::endl;
-	while(bgzf_tell(bam) < it->end) {
-		std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
-		kstring_t seq = {0,0,NULL};
-
+	
+	std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
+	
+	int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
+	uint32_t bin_mq_nl, flag_nc, flag, bin, mq, qnl;
+	
+	bgzf_read(bam, &r,         sizeof(r));
+	bgzf_read(bam, &refID,     sizeof(refID));
+	bgzf_read(bam, &pos,       sizeof(pos));
+	bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
+	bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
+	
+     
+	r -= (sizeof(int32_t) * 7);
+	r -= (sizeof(uint32_t) * 2) ;
+	
+	bin = bin_mq_nl >>       16;
+	mq  = bin_mq_nl >> 8 & 0xff;
+	qnl = bin_mq_nl &      0xff;
+	
+	uint32_t test, cigar_ops;
+	test = flag_nc >> 16;
+	cigar_ops = flag_nc & 0xFFFF;
+	
+	
+	bgzf_read(bam, &lseq,      sizeof(lseq));
+	bgzf_read(bam, &nextRefID, sizeof(nextRefID));
+	bgzf_read(bam, &nextPos,   sizeof(nextPos));
+	bgzf_read(bam, &tlen,      sizeof(tlen));
+	char readName[qnl];
 		
-		int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
-		uint32_t bin_mq_nl, flag_nc, flag;
-		
-		bgzf_read(bam, &r,         sizeof(r));
-		bgzf_read(bam, &refID,     sizeof(refID));
-		bgzf_read(bam, &pos,       sizeof(pos));
-		bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
-		bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
+	
+	bgzf_read(bam,&readName, qnl);
+	r -= (sizeof(char)*qnl);
+	
+	uint32_t cigarOps[cigar_ops];
+	
+	bgzf_read(bam, cigarOps, sizeof(uint32_t)*cigar_ops);
+	
+	r-= sizeof(uint32_t)*cigar_ops;
+	
+	std::stringstream cig;
+	for(int i = 0; i < cigar_ops; i++){
+	  cig << (cigarOps[i] >> BAM_CIGAR_SHIFT);
+	  cig << BAM_CIGAR_LOOKUP[ (cigarOps[i] & BAM_CIGAR_MASK) ];
+	}
+	
+	uint8_t seqa[(lseq+1)/2];
+	bgzf_read(bam, seqa,       ((lseq+1)/2));
+	
+	r-=(sizeof(uint8_t)*((lseq+1)/2));
+	
+	char seqASCII[lseq];
+	int i;
+	for (i = 0; i < lseq; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
+	
+	
+	char qual[lseq];
+	bgzf_read(bam, qual, (sizeof(char) * lseq));
+	
+	for(i = 0; i < lseq; i++){
+	  qual[i] += 33;
+	}
 
-		
-		uint32_t test, cigar_ops;
-		test = flag_nc >> 16;
-		cigar_ops = flag_nc & 0xFFFF;
-		
-
-		bgzf_read(bam, &lseq,      sizeof(lseq));
-		bgzf_read(bam, &nextRefID, sizeof(nextRefID));
-		bgzf_read(bam, &nextPos,   sizeof(nextPos));
-		bgzf_read(bam, &tlen,      sizeof(tlen));
-		kstring_t readName;
-		bgzf_getline(bam, 0, &readName);
-
-		uint32_t cigar[cigar_ops];
-		bgzf_read(bam, cigar,      sizeof(uint32_t)*cigar_ops);
-		
-		uint8_t seqa[(lseq+1)/2];
-		bgzf_read(bam, seqa,       sizeof(uint8_t)*((lseq+1)/2));
-		char seqASCII[lseq];
-		int i;
-		for (i = 0; i < lseq; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
-		char qual[lseq];
-		bgzf_read(bam, qual, sizeof(char) * lseq);
-
-		r -= sizeof(refID) + sizeof(pos) + sizeof(bin_mq_nl) + sizeof(flag_nc) + sizeof(lseq) + sizeof(nextRefID) + 
-			 sizeof(nextPos) + sizeof(tlen) + sizeof(readName.s) + sizeof(cigar) + sizeof(seqa) + sizeof(qual); 
-
-		char tmp[r];
-		std::cerr << "remaining: " << r     << std::endl;
-		std::cerr << "refID:     " << refID << std::endl;
-		std::cerr << "pos:       " << pos   << std::endl;
-		std::cerr << "lseq:      " << lseq   << std::endl;
-		std::cerr << "nextrefID: " << nextRefID << std::endl;
-		std::cerr << "nextPos  : " << nextPos << std::endl;
-		std::cerr << "Readname  : " << readName.s << std::endl;
-		std::cerr << "Flag: " << test << ", cigar_ops: " << cigar_ops << std::endl;
-		std::cerr << "Cigar: " << cigar << std::endl;
-		std::cerr << "Seq:  " << seqASCII << std::endl;
-		std::cerr << "Qual: " << qual << std::endl;
-		std::cerr << bgzf_read(bam, tmp, r) << std::endl;
-
-	  }
+	r-=(sizeof(char) * lseq);
+	
+	
+	char rest[r];
+	bgzf_read(bam, rest, r*sizeof(char));
+       
+	
+	std::cerr << "remaining: " << r     << std::endl;
+	std::cerr << "refID:     " << refID << std::endl;
+	std::cerr << "pos:       " << pos   << std::endl;
+	std::cerr << "lseq:      " << lseq   << std::endl;
+	std::cerr << "nextrefID: " << nextRefID << std::endl;
+	std::cerr << "nextPos  : " << nextPos << std::endl;
+	std::cerr << "Readname  : " << readName << std::endl;
+	std::cerr << "Flag: " << test << ", cigar_ops: " << cigar_ops << std::endl;
+	std::cerr << "Cigar: " << cig.str() << std::endl;
+	std::cerr << "Seq:  " << seqASCII << std::endl;
+	std::cerr << "Qual: " << qual << std::endl;
+	std::cerr << "Rest: " << rest << std::endl;
+       
 	}
    	bgzf_close(bam);
  
