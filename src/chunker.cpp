@@ -211,15 +211,15 @@ int get_reads(std::vector<interval> & chunks,
 		uint8_t seqa[(lseq+1)/2];
 		bgzf_read(bam, seqa,       sizeof(uint8_t)*((lseq+1)/2));
 		char seqASCII[lseq];
-		for (int i = 0; i < lseq; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
-
+		int i;
+		for (i = 0; i < lseq; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
 		char qual[lseq];
 		bgzf_read(bam, qual, sizeof(char) * lseq);
 
-		r -= sizeof(r) + sizeof(refID) + sizeof(pos) + sizeof(bin_mq_nl) + sizeof(flag_nc) + sizeof(lseq) + sizeof(nextRefID) + 
+		r -= sizeof(refID) + sizeof(pos) + sizeof(bin_mq_nl) + sizeof(flag_nc) + sizeof(lseq) + sizeof(nextRefID) + 
 			 sizeof(nextPos) + sizeof(tlen) + sizeof(readName.s) + sizeof(cigar) + sizeof(seqa) + sizeof(qual); 
 
-		char* tmp;
+		char tmp[r];
 		std::cerr << "remaining: " << r     << std::endl;
 		std::cerr << "refID:     " << refID << std::endl;
 		std::cerr << "pos:       " << pos   << std::endl;
@@ -231,7 +231,6 @@ int get_reads(std::vector<interval> & chunks,
 		std::cerr << "Cigar: " << cigar << std::endl;
 		std::cerr << "Seq:  " << seqASCII << std::endl;
 		std::cerr << "Qual: " << qual << std::endl;
-		std::cerr << "sizeof: " << sizeof(char) << std::endl;
 		std::cerr << bgzf_read(bam, tmp, r) << std::endl;
 
 	  }
