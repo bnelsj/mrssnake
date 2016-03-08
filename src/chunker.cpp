@@ -36,6 +36,8 @@ THE SOFTWARE.
 #include <string>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <fstream>
 #include <math.h>
 #include <vector>
@@ -150,6 +152,26 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
+ Function input  :
+
+ Function does   :
+
+ Function returns:
+
+*/
+
+void chunk_read(std::string &read, int chunk_size)
+{
+	int n_to_do = read.length() / chunk_size;
+
+    for(int i = 0; i < n_to_do; i++){
+        std::cout << ">0" << std::endl;
+        std::cout << read.substr(i*chunk_size, i*chunk_size + chunk_size) << std::endl;
+    }
+
+}
+//------------------------------- SUBROUTINE --------------------------------
+/*
  Function input  : Vector of virtual offset intervals, bamfile
 
  Function does   : Iterate over vector, seek to start of interval and read to end
@@ -180,8 +202,6 @@ int get_reads(std::vector<interval> & chunks,
 	std::cerr << it->start << " " << it->end << std::endl;
 	while(bgzf_tell(bam) < it->end) {
 		std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
-		kstring_t seq = {0,0,NULL};
-
 		
 		int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
 		uint32_t bin_mq_nl, flag_nc, flag;
@@ -208,16 +228,18 @@ int get_reads(std::vector<interval> & chunks,
 		uint32_t cigar[cigar_ops];
 		bgzf_read(bam, cigar,      sizeof(uint32_t)*cigar_ops);
 		
-		uint8_t seqa[(lseq+1)/2];
-		bgzf_read(bam, seqa,       sizeof(uint8_t)*((lseq+1)/2));
-		char seqASCII[lseq];
+		uint8_t seqByte[(lseq+1)/2];
+		bgzf_read(bam, seqByte,       sizeof(uint8_t)*((lseq+1)/2));
+        std::stringstream seqStream;
+		std::string seqString;
 		int i;
-		for (i = 0; i < lseq; ++i) seqASCII[i] = "=ACMGRSVTWYHKDBN"[bam_seqi(seqa, i)];
+		for (i = 0; i < lseq; ++i) seqStream << "=ACMGRSVTWYHKDBN"[bam_seqi(seqByte, i)];
+        seqStream >> seqString;
 		char qual[lseq];
 		bgzf_read(bam, qual, sizeof(char) * lseq);
 
 		r -= sizeof(refID) + sizeof(pos) + sizeof(bin_mq_nl) + sizeof(flag_nc) + sizeof(lseq) + sizeof(nextRefID) + 
-			 sizeof(nextPos) + sizeof(tlen) + sizeof(readName.s) + sizeof(cigar) + sizeof(seqa) + sizeof(qual); 
+			 sizeof(nextPos) + sizeof(tlen) + sizeof(readName.s) + sizeof(cigar) + sizeof(seqByte) + sizeof(qual); 
 
 		char tmp[r];
 		std::cerr << "remaining: " << r     << std::endl;
@@ -226,12 +248,14 @@ int get_reads(std::vector<interval> & chunks,
 		std::cerr << "lseq:      " << lseq   << std::endl;
 		std::cerr << "nextrefID: " << nextRefID << std::endl;
 		std::cerr << "nextPos  : " << nextPos << std::endl;
-		std::cerr << "Readname  : " << readName.s << std::endl;
-		std::cerr << "Flag: " << test << ", cigar_ops: " << cigar_ops << std::endl;
-		std::cerr << "Cigar: " << cigar << std::endl;
-		std::cerr << "Seq:  " << seqASCII << std::endl;
-		std::cerr << "Qual: " << qual << std::endl;
+		std::cerr << "Readname : " << readName.s << std::endl;
+		std::cerr << "Flag:      " << test << ", cigar_ops: " << cigar_ops << std::endl;
+		std::cerr << "Cigar:     " << cigar << std::endl;
+		std::cerr << "Seq:       " << seqString << std::endl;
+		std::cerr << "Qual:      " << qual << std::endl;
 		std::cerr << bgzf_read(bam, tmp, r) << std::endl;
+
+		chunk_read(seqString, globalOpts.chunk_size);
 
 	  }
 	}
@@ -322,29 +346,8 @@ void read_index(std::vector<interval> & chunks,
 
 
 
-//------------------------------- SUBROUTINE --------------------------------
-/*
- Function input  :
 
- Function does   :
 
- Function returns:
-
-*/
-/*
-std::string chunk_read(std::string &read, int chunk_size)
-{
-	std::stringstream stream;
-	int n_to_do = read->length / chunk_size;
-
-    for(i = 0; i < n_to_do; i++){
-        stream << ">0" << std::endl;
-        stream << read->seq[i*chunk_size : i*chunk_size + chunk_size] << std::endl;
-    }
-
-    return stream;
-}
-*/
 //-------------------------------    MAIN     --------------------------------
 /*
  Comments:
