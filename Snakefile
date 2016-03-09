@@ -97,7 +97,7 @@ rule map_and_count:
             "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
             "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "./bin/bam_chunker {input[0]} {wildcards.part} {BAM_PARTITIONS} | "
+            "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
