@@ -13,9 +13,11 @@ custom_contig:
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
 bam_partitions: 500
-auto_assign: True
-max_bp_in_mem: 300000000
 
-use_source_contigs_for_array: True
 array_contigs: 
         - FAM115C_LOC154761_final
+
+# If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 1 million reads
+auto_assign: True
+max_basepairs_in_mem: 300000000
+
