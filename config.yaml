@@ -15,7 +15,6 @@ custom_contig:
 bam_partitions: 500
 
 array_contigs: 
-        - FAM115C_LOC154761_final
 
 # If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 1 million reads
 auto_assign: True
