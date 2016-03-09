@@ -72,7 +72,7 @@ rule merge_sparse_matrices:
 #        "python3 live_merger.py {output} --infiles {params.files}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample]
+    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker"
     output: "region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
@@ -81,7 +81,7 @@ rule map_and_count:
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
 
-        if ARRAY_CONTIGS != []:
+        if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
             common_contigs = "--common_contigs " + " ".join(ARRAY_CONTIGS)
         else:
             common_contigs = ""
@@ -92,6 +92,7 @@ rule map_and_count:
             read_counter_args = ""
 
         shell(
+            "hostname; "
             "mkfifo {fifo}; "
             "mkdir -p /var/tmp/mrsfast_index; "
             "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
