@@ -48,13 +48,15 @@ THE SOFTWARE.
 #include <stdint.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <sstream>
 #include "htslib/hts.h"
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
 
 #define HTS_FMT_BAI 1
 
-const char* const BAM_DNA_LOOKUP = "=ACMGRSVTWYHKDBN";
+const char* const BAM_DNA_LOOKUP   = "=ACMGRSVTWYHKDBN";
+const char* const BAM_CIGAR_LOOKUP = "MIDNSHP=X";
 #define bam_seqi(s, i) ((s)[(i)>>1] >> ((~(i)&1)<<2) & 0xf)
 
 struct interval
@@ -143,8 +145,6 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
 	chunk_range.start = range_size * part;
 	part == nparts-1 ? chunk_range.end = nchunks : chunk_range.end = range_size * part + range_size;
 	
-	//chunk_range.end = range_size * part + range_size;
-	
 	std::vector<struct interval> chunks_to_read(&chunks[chunk_range.start], &chunks[chunk_range.end]);
 
 	return chunks_to_read;
@@ -152,11 +152,11 @@ std::vector<struct interval> get_chunk_range(std::vector<struct interval> chunks
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
- Function input  :
+ Function input  : String of bases from a single read, size of chunks to output
 
- Function does   :
+ Function does   : Splits read into chunks until there isn't enough sequence left for a full chunk, writes chunks to cout in fasta format
 
- Function returns:
+ Function returns: void
 
 */
 
@@ -164,12 +164,13 @@ void chunk_read(std::string &read, int chunk_size)
 {
 	int n_to_do = read.length() / chunk_size;
 
-    for(int i = 0; i < n_to_do; i++){
+    for(int i = 0; i < n_to_do; ++i){
         std::cout << ">0" << std::endl;
-        std::cout << read.substr(i*chunk_size, i*chunk_size + chunk_size) << std::endl;
+        std::cout << read.substr(i*chunk_size, chunk_size) << std::endl;
     }
 
 }
+
 //------------------------------- SUBROUTINE --------------------------------
 /*
  Function input  : Vector of virtual offset intervals, bamfile
@@ -189,22 +190,18 @@ int get_reads(std::vector<interval> & chunks,
 	for(std::vector<interval>::iterator it = chunks.begin(); 
       it != chunks.end(); it++){
     
-    index+= 1;
-    
-    if(index > 1){
-      	break;
-    }
+		if(bgzf_seek(bam, it->start, 0) == -1){
+		  std::cerr << "Error could not seek. " << std::endl;
+		  exit(1);
+		}
+		//std::cerr << it->start << " " << it->end << std::endl;
 
-	if(bgzf_seek(bam, it->start, 0) == -1){
-	  std::cerr << "Error could not seek. " << std::endl;
-	  exit(1);
-	}
-	std::cerr << it->start << " " << it->end << std::endl;
-	while(bgzf_tell(bam) < it->end) {
-		std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
+		while(bgzf_tell(bam) < it->end) {
+			
+		//std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
 		
-		int32_t r,refID, pos, lseq, nextRefID, nextPos, tlen;
-		uint32_t bin_mq_nl, flag_nc, flag;
+		int32_t r, refID, pos, lseq, nextRefID, nextPos, tlen;
+		uint32_t bin_mq_nl, flag_nc, flag, bin, mq, qnl;
 		
 		bgzf_read(bam, &r,         sizeof(r));
 		bgzf_read(bam, &refID,     sizeof(refID));
@@ -212,52 +209,78 @@ int get_reads(std::vector<interval> & chunks,
 		bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
 		bgzf_read(bam, &flag_nc,   sizeof(flag_nc));
 
-		
+		r -= (sizeof(int32_t) * 3);
+		r -= (sizeof(uint32_t) * 2);
+
+
+		bin = bin_mq_nl >>       16;
+		mq  = bin_mq_nl >> 8 & 0xff;
+		qnl = bin_mq_nl &      0xff;
+
 		uint32_t test, cigar_ops;
 		test = flag_nc >> 16;
 		cigar_ops = flag_nc & 0xFFFF;
-		
 
 		bgzf_read(bam, &lseq,      sizeof(lseq));
 		bgzf_read(bam, &nextRefID, sizeof(nextRefID));
 		bgzf_read(bam, &nextPos,   sizeof(nextPos));
 		bgzf_read(bam, &tlen,      sizeof(tlen));
-		kstring_t readName;
-		bgzf_getline(bam, 0, &readName);
 
-		uint32_t cigar[cigar_ops];
-		bgzf_read(bam, cigar,      sizeof(uint32_t)*cigar_ops);
+		r -= sizeof(int32_t) * 4;
+		char readName[qnl];
+		
+		bgzf_read(bam,&readName, qnl);
+		r -= (sizeof(char)*qnl);
+
+		uint32_t cigarOps[cigar_ops];
+		
+		bgzf_read(bam, cigarOps, sizeof(uint32_t)*cigar_ops);
+		r-= sizeof(uint32_t) * cigar_ops;
+
+		std::stringstream cig;
+		for(int i = 0; i < cigar_ops; i++){
+		  cig << (cigarOps[i] >> BAM_CIGAR_SHIFT);
+		  cig << BAM_CIGAR_LOOKUP[ (cigarOps[i] & BAM_CIGAR_MASK) ];
+		}
 		
 		uint8_t seqByte[(lseq+1)/2];
-		bgzf_read(bam, seqByte,       sizeof(uint8_t)*((lseq+1)/2));
-        std::stringstream seqStream;
+		bgzf_read(bam, seqByte,       ((lseq+1)/2));
+
+		r-=(sizeof(uint8_t)*((lseq+1)/2));
+
+		std::stringstream seqStream;
 		std::string seqString;
 		int i;
 		for (i = 0; i < lseq; ++i) seqStream << "=ACMGRSVTWYHKDBN"[bam_seqi(seqByte, i)];
-        seqStream >> seqString;
+		seqStream >> seqString;
+		
 		char qual[lseq];
-		bgzf_read(bam, qual, sizeof(char) * lseq);
+		bgzf_read(bam, qual, (sizeof(char) * lseq));
 
-		r -= sizeof(refID) + sizeof(pos) + sizeof(bin_mq_nl) + sizeof(flag_nc) + sizeof(lseq) + sizeof(nextRefID) + 
-			 sizeof(nextPos) + sizeof(tlen) + sizeof(readName.s) + sizeof(cigar) + sizeof(seqByte) + sizeof(qual); 
+		for(i = 0; i < lseq; i++){
+		  qual[i] += 33;
+		}
 
-		char tmp[r];
-		std::cerr << "remaining: " << r     << std::endl;
-		std::cerr << "refID:     " << refID << std::endl;
-		std::cerr << "pos:       " << pos   << std::endl;
-		std::cerr << "lseq:      " << lseq   << std::endl;
-		std::cerr << "nextrefID: " << nextRefID << std::endl;
-		std::cerr << "nextPos  : " << nextPos << std::endl;
-		std::cerr << "Readname : " << readName.s << std::endl;
-		std::cerr << "Flag:      " << test << ", cigar_ops: " << cigar_ops << std::endl;
-		std::cerr << "Cigar:     " << cigar << std::endl;
-		std::cerr << "Seq:       " << seqString << std::endl;
-		std::cerr << "Qual:      " << qual << std::endl;
-		std::cerr << bgzf_read(bam, tmp, r) << std::endl;
+		r-=(sizeof(char) * lseq);
+		r += 4;	
+		char rest[r];
+//		std::cerr << "remaining: " << r     << std::endl;
+		bgzf_read(bam, rest, r*sizeof(char));
+//		std::cerr << "refID:     " << refID << std::endl;
+//		std::cerr << "pos:       " << pos   << std::endl;
+//		std::cerr << "lseq:      " << lseq   << std::endl;
+//		std::cerr << "nextrefID: " << nextRefID << std::endl;
+//		std::cerr << "nextPos  : " << nextPos << std::endl;
+//		std::cerr << "Readname  : " << readName << std::endl;
+//		std::cerr << "Flag: " << test << ", cigar_ops: " << cigar_ops << std::endl;
+//		std::cerr << "Cigar: " << cig.str() << std::endl;
+//		std::cerr << "Seq:  " << seqString << std::endl;
+//		std::cerr << "Qual: " << qual << std::endl;
+//		std::cerr << "r: " << r << " Rest: " << rest << std::endl;
 
 		chunk_read(seqString, globalOpts.chunk_size);
+		}
 
-	  }
 	}
    	bgzf_close(bam);
  
@@ -291,18 +314,15 @@ void read_index(std::vector<interval> & chunks,
   
   char magic[4];
   fread(&magic, sizeof(char), 4, ptr_myfile);	
-  printf("magic:%s\n",magic);
   
   int32_t n_ref;
   fread(&n_ref,sizeof(int32_t),1,ptr_myfile);
-  printf("n_ref:%d\n",n_ref);
   
   int32_t nn;
   for(nn = 0; nn < n_ref; ++nn){
     
     int32_t n_bin;
     fread(&n_bin,sizeof(int32_t),1,ptr_myfile);
-    printf(" n_bin:%lli\n",n_bin);
     
     int32_t i;
     for (i = 0; i < n_bin; ++i) {
@@ -311,7 +331,6 @@ void read_index(std::vector<interval> & chunks,
       
       int32_t n_chunk;
       fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
-      printf("  n_chunk:%lli\n",n_chunk);
       
       int32_t j;
       for (j = 0; j < n_chunk; ++j) {
@@ -319,8 +338,6 @@ void read_index(std::vector<interval> & chunks,
 	interval tmp;
 	fread(&chunk_beg,sizeof(uint64_t),1,ptr_myfile);
 	fread(&chunk_end,sizeof(uint64_t),1,ptr_myfile);
-
-	printf ( " offset %llu\n ", chunk_beg ) ;
 
 	tmp.start = chunk_beg;
 	tmp.end = chunk_end;
@@ -338,8 +355,6 @@ void read_index(std::vector<interval> & chunks,
 
   uint64_t unmapped;
   fread(&unmapped, sizeof(uint64_t),1, ptr_myfile);
-  std::cout << "unmapped " << unmapped << std::endl;
-
  
   fclose(ptr_myfile); 
 }
