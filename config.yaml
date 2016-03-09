@@ -12,8 +12,14 @@ custom_contig:
     masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
-window_size: 25000000
+window_size: 5000000
 use_source_contigs_for_array: True
+
 array_contigs: 
         - FAM115C_LOC154761_final
+
+# If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 1 million reads
+auto_assign: True
+max_basepairs_in_mem: 300000000
+
 jobfile: "mapping_joblist.json"
