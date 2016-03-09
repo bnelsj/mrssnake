@@ -182,7 +182,7 @@ def count_reads(samfile, contig_manager, args):
         read_dict[contig][edist, start] += 1
         contig_manager.contigs_seen[contig].reads += 1
 
-        if i % 1000000 == 0 and i > 0:
+        if i % 100000 == 0 and i > 0:
             sys.stderr.write("Counter: %d reads processed\n" % i)
             if args.max_basepairs_in_mem > 0:
                 sys.stderr.write("Counter: rebalancing array contigs...\n")
@@ -194,9 +194,11 @@ def count_reads(samfile, contig_manager, args):
                     if contig not in contig_manager.array_contigs:
                         if not isinstance(array, lil_matrix):
                             read_dict[contig] = lil_matrix(array)
+                            del(array)
                     else:
                         if not isinstance(array, np.ndarray):
                             read_dict[contig] = array.toarray()
+                            del(array)
                 finish_time = time.time()
                 total_time = finish_time - start_time
                 sys.stderr.write("Counter: rebalancing finished in %d sec...\n" % total_time)
