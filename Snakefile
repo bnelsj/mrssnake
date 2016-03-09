@@ -15,7 +15,10 @@ MANIFEST = config["manifest"]
 REFERENCE = config["reference"]
 MASKED_REF = config[REFERENCE]["masked_ref"]
 CONTIGS_FILE = config[REFERENCE]["contigs"]
-WINDOW_SIZE = config["window_size"]
+
+BAM_PARTITIONS = config["bam_partitions"]
+AUTO_ASSIGN = config["auto_assign"]
+MAX_BP = config["max_bp_in_mem"]
 
 USE_SOURCE_CONTIGS = config["use_source_contigs_for_array"]
 ARRAY_CONTIGS = config["array_contigs"]
@@ -37,65 +40,6 @@ with open(MANIFEST, "r") as reader:
         sn, bam = line.rstrip().split()
         SAMPLES[sn] = bam
 
-JOBFILE = config["jobfile"]
-# Load JOBFILE if it exists
-if os.path.exists(JOBFILE):
-    with open(JOBFILE, "r") as reader:
-        SAMPLE_MAPPING_JOBS = json.load(reader)
-else:
-    print("""WARNING: no jobfile found. Run 'snakemake make_jobfile' to create one.""")
-
-def create_jobdict(wildcards, samples):
-    # Combine short contigs for mapping
-    SAMPLE_MAPPING_JOBS = {}
-    unique_contig_dicts = {}
-    for sn, bamfile in samples.items():
-        try:
-            bam = pysam.AlignmentFile(bamfile)
-        except ValueError as e:
-            print("Error: Can't open %s" % bamfile, file=sys.stderr)
-        contigs = {bam.references[i]: bam.lengths[i] for i in range(bam.nreferences)}
-        bam.close()
-        print(sn, flush=True)
-        unique = True
-        for sample, contigs_dict in unique_contig_dicts.items():
-            if contigs == contigs_dict:
-                SAMPLE_MAPPING_JOBS[sn] = SAMPLE_MAPPING_JOBS[sample]
-                unique = False
-                break
-        if unique:
-            unique_contig_dicts[sn] = contigs
-        else:
-            continue
-        print("Processing sample %s" % sn, flush=True)
-        full_jobs = []
-        full_jobs_dict = {}
-        jobs = []
-
-        for contig, size in contigs.items():
-            if size >= WINDOW_SIZE:
-                nregions = size // WINDOW_SIZE + 1
-                coords = ["%d_%d" % (i * WINDOW_SIZE, (i+1) * WINDOW_SIZE) for i in range(nregions)]
-                full_jobs.extend(["%s.%s" % (contig, x) for x in coords])
-               
-            if size < WINDOW_SIZE:
-                job_added = False
-                for job in jobs:
-                    if job[1] + size < WINDOW_SIZE:
-                        job[0].append(contig)
-                        job[1] += size
-                        job_added = True
-                        break
-                if not job_added:
-                    jobs.append([[contig], size])
-        (contigs, size) = jobs[0]
-        SAMPLE_MAPPING_JOBS[sn] = {"multiple.%s" % (hashlib.md5(" ".join(contigs).encode("utf-8")).hexdigest()): contigs for (contigs, size) in jobs}
-        full_jobs_dict = {name: name.split(".") for name in full_jobs}
-        SAMPLE_MAPPING_JOBS[sn].update(full_jobs_dict)
-        SAMPLE_MAPPING_JOBS[sn].update({"unmapped": "unmapped"})
-    print(len(unique_contig_dicts), unique_contig_dicts.keys())
-    return SAMPLE_MAPPING_JOBS
-
 def get_sparse_matrices_from_sample(wildcards):
     names = SAMPLE_MAPPING_JOBS[wildcards.sample].keys()
     return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
@@ -107,20 +51,10 @@ def get_multiple_contigs(sample, chr, num):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())#,
-           #expand("region_matrices/list/{sample}.txt", sample = SAMPLES.keys())
-
-rule list_sparse_matrices:
-    input: get_sparse_matrices_from_sample
-    output: "region_matrices/list/{sample}.txt"
-    params: sge_opts = ""
-    run:
-        with open(output[0], "w") as of:
-            for infile in input:
-                of.write(infile + "\n")
+    input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
 
 rule merge_sparse_matrices:
-    input: get_sparse_matrices_from_sample
+    input: expand("region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS, sample = SAMPLES.keys(), part = range(BAM_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     benchmark: "benchmarks/merger/{sample}.json"
@@ -130,57 +64,33 @@ rule merge_sparse_matrices:
         shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
         shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
-rule map_and_count_unmapped:
-    input: lambda wildcards: SAMPLES[wildcards.sample], JOBFILE
-    output: "region_matrices/{sample}/{sample}.unmapped.pkl"
-    params: sge_opts = "-pe orte 4 -l mfree=40G -N map_unmapped"
-    benchmark: "benchmarks/counter/{sample}/{sample}.unmapped.json"
-    priority: 50
-    run:
-        fifo = "$TMPDIR/mrsfast_fifo"
-        masked_ref_name = os.path.basename(MASKED_REF)
-
-        shell(
-            "mkfifo {fifo}; "
-            "mkdir -p /var/tmp/mrsfast_index; "
-            "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
-            "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
-            "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "samtools view -h {input[0]} '*' | "
-            "python3 chunker.py /dev/stdin --contig unmapped | "
-            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit --threads 4 >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --all_contigs"
-            )
-
-rule merge_matrices_live:
-    input: lambda wildcards: SAMPLES[wildcards.sample]
-    output: "mapping/{sample}/{sample}/wssd_out_file_live"
-    params: sge_opts = "-l mfree=32G -N merge_{sample}", files = get_sparse_matrices_from_sample
-    priority: 10
-    shell:
-        "python3 live_merger.py {output} --infiles {params.files}"
+#rule merge_matrices_live:
+#    input: lambda wildcards: SAMPLES[wildcards.sample]
+#    output: "mapping/{sample}/{sample}/wssd_out_file_live"
+#    params: sge_opts = "-l mfree=32G -N merge_{sample}", files = get_sparse_matrices_from_sample
+#    priority: 10
+#    shell:
+#        "python3 live_merger.py {output} --infiles {params.files}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], JOBFILE
-    output: "region_matrices/{sample}/{sample}.{chr}.{num}.pkl"
+    input: lambda wildcards: SAMPLES[wildcards.sample]
+    output: "region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS
     params: sge_opts = "-l mfree=4G -N map_count"
-    benchmark: "benchmarks/counter/{sample}/{sample}.{chr}.{num}.json"
+    benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
     run:
         fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
 
-        if (not USE_SOURCE_CONTIGS) and ARRAY_CONTIGS != []:
-            common_contigs = ARRAY_CONTIGS
+        if ARRAY_CONTIGS != []:
+            common_contigs = "--common_contigs " + " ".join(ARRAY_CONTIGS)
         else:
-            common_contigs = wildcards.chr
+            common_contigs = ""
 
-        if wildcards.chr == "multiple":
-            contigs = get_multiple_contigs(wildcards.sample, wildcards.chr, wildcards.num)
-            chunker_args = "--contigs_hash %s --jobfile %s --sample %s" % (wildcards.num, input[1], wildcards.sample)
+        if AUTO_ASSIGN:
+            read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
         else:
-            start, end = wildcards.num.split("_")
-            chunker_args = "--contig %s --start %s --end %s" % (wildcards.chr, start, end)
+            read_counter_args = ""
 
         shell(
             "mkfifo {fifo}; "
@@ -188,9 +98,9 @@ rule map_and_count:
             "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
             "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
             "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
-            "python3 chunker.py {input[0]} {chunker_args} | "
+            "./bin/bam_chunker {input[0]} {wildcards.part} {BAM_PARTITIONS} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} --common_contigs {common_contigs}"
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
 
 rule check_bam_files:
@@ -215,18 +125,6 @@ rule get_header:
     shell:
         "samtools view -H {input} > {output}"
 
-rule make_jobfile:
-    input: MANIFEST, "MRSFASTULTRA_INDEXED"
-    output: JOBFILE
-    params: sge_opts = "", samples = SAMPLES, window_size = WINDOW_SIZE
-    benchmark: "benchmarks/jobfile/jobfile.json"
-    script:
-        "create_jobfile.py"
-#    run:
-#        sample_mapping_jobs = create_jobdict(wildcards, SAMPLES)
-#        with open(output[0], "w") as writer:
-#            json.dump(sample_mapping_jobs, writer)
-
 rule check_index:
     input: MASKED_REF
     output: touch("MRSFASTULTRA_INDEXED"), temp(".mrsfast_index_test_output.txt")
@@ -236,3 +134,10 @@ rule check_index:
             shell("mrsfast --search {input[0]} --seq dummy.fq > {output[1]}")
         except CalledProcessError as e:
             sys.exit("Reference %s was not indexed with the current version of mrsfastULTRA. Please reindex." % input[0])
+
+rule make_chunker:
+    input: "src/chunker.cpp", "Makefile"
+    output: "bin/bam_chunker"
+    params: sge_opts = ""
+    shell:
+        "make"
