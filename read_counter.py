@@ -182,7 +182,7 @@ def count_reads(samfile, contig_manager, args):
         read_dict[contig][edist, start] += 1
         contig_manager.contigs_seen[contig].reads += 1
 
-        if i % 100000 == 0 and i > 0:
+        if i % args.rebalancing_freq == 0 and i > 0:
             sys.stderr.write("Counter: %d reads processed\n" % i)
             if args.max_basepairs_in_mem > 0:
                 sys.stderr.write("Counter: rebalancing array contigs...\n")
@@ -217,6 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("--all_contigs", action="store_true", help="Create numpy array for all contigs (Fast, high mem requirement)")
     parser.add_argument("--noncanonical_contigs", action="store_true", help="Create numpy array for all noncanonical contigs (Fast, high mem requirement).")
     parser.add_argument("--max_basepairs_in_mem", type=int, default = 0, help="Number of reference bp to keep in memory")
+    parser.add_argument("--rebalance_freq", type=int, default = 100000, help="Reads between contig array rebalancing")
 
     args = parser.parse_args()
 
