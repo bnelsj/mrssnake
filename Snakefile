@@ -20,7 +20,6 @@ BAM_PARTITIONS = config["bam_partitions"]
 AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
-USE_SOURCE_CONTIGS = config["use_source_contigs_for_array"]
 ARRAY_CONTIGS = config["array_contigs"]
 
 if not os.path.exists("log"):

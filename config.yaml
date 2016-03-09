@@ -19,5 +19,5 @@ array_contigs:
 
 # If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 1 million reads
 auto_assign: True
-max_basepairs_in_mem: 300000000
+max_bp_in_mem: 300000000
 
