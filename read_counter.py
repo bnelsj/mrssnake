@@ -28,7 +28,7 @@ class Contig:
         return self.reads / self.size == other.reads / other.size
 
     def __lt__(self, other):
-        return self.reads / self.size == other.reads / other.size
+        return self.reads / self.size < other.reads / other.size
 
 class ContigManager:
     def __init__(self, max_bases, contigs_seen = {}, array_contigs = []):
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     finally:
         samfile.close()
 
-    for name, contig in sorted(self.contigs_seen.items()):
+    for name, contig in sorted(contig_manager.contigs_seen.items()):
         print(name, contig.reads, sep=" ", file=sys.stderr)
 
     print("Counter: finished counting reads", file=sys.stderr, flush=True)
