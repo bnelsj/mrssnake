@@ -16,6 +16,7 @@ from scipy.sparse import lil_matrix
 from scipy.sparse import csr_matrix
 from functools import total_ordering
 import time
+import gc
 
 @total_ordering
 class Contig:
@@ -161,12 +162,10 @@ def count_reads(samfile, contig_manager, args):
             length = contig_manager.contigs_seen[contig].size
             if contig in contig_manager.array_contigs:
                 read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
-                sys.stderr.write("Counter: %s (%d, %d) numpy array\n" % (contig, nrows, length))
-                sys.stderr.flush()
+                print("Counter: %s (%d, %d) numpy array" % (contig, nrows, length), file=sys.stderr, flush=True)
             else:
                 read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
-                sys.stderr.write("Counter: %s scipy lil_matrix\n" % contig)
-                sys.stderr.flush()
+                print("Counter: %s scipy lil_matrix" % contig, file=sys.stderr, flush=True)
 
 
         if isinstance(read_dict[contig], np.ndarray):
@@ -182,14 +181,15 @@ def count_reads(samfile, contig_manager, args):
         read_dict[contig][edist, start] += 1
         contig_manager.contigs_seen[contig].reads += 1
 
-        if i % args.rebalancing_freq == 0 and i > 0:
-            sys.stderr.write("Counter: %d reads processed\n" % i)
+        if i % args.rebalance_freq == 0 and i > 0:
+            print("Counter: %d reads processed" % i, file=sys.stderr)
             if args.max_basepairs_in_mem > 0:
-                sys.stderr.write("Counter: rebalancing array contigs...\n")
+                print("Counter: rebalancing array contigs...", file=sys.stderr)
                 start_time = time.time()
-                print(contig_manager.array_contigs, sep=" ")
+                old_contigs = contig_manager.array_contigs
                 contig_manager.rebalance()
-                print(contig_manager.array_contigs, sep=" ")
+                print("Contigs removed:", " ".join([contig for contig in old_contigs if contig not in contig_manager.array_contigs]), sep = " ", file=sys.stderr)
+                print("Contigs added:  ", " ".join([contig for contig in contig_manager.array_contigs if contig not in old_contigs]), sep = " ", file=sys.stderr, flush=True)
                 for contig, array in read_dict.items():
                     if contig not in contig_manager.array_contigs:
                         if not isinstance(array, lil_matrix):
@@ -199,9 +199,11 @@ def count_reads(samfile, contig_manager, args):
                         if not isinstance(array, np.ndarray):
                             read_dict[contig] = array.toarray()
                             del(array)
+                collected = gc.collect()
+                print("Counter GC: collected %d objects." % collected, file=sys.stderr)
                 finish_time = time.time()
                 total_time = finish_time - start_time
-                sys.stderr.write("Counter: rebalancing finished in %d sec...\n" % total_time)
+                print("Counter: rebalancing finished in %d sec..." % total_time, file=sys.stderr, flush=True)
             sys.stderr.flush()
 
     return read_dict
@@ -246,34 +248,32 @@ if __name__ == "__main__":
         else:
             contig_manager.add_contig(name, size)
 
-    print("Max bases: ", contig_manager.max_bases, "Used bases: ", contig_manager.used_bases)
+    print("Max bases: ", contig_manager.max_bases, "Used bases: ", contig_manager.used_bases, file=sys.stderr)
 
     samfile = pysam.AlignmentFile(args.infile, "r", check_sq = False)
-    sys.stderr.write("Counter: got samfile header\n")
-    sys.stdout.flush()
+    print("Counter: got samfile header", file=sys.stderr, flush=True)
 
     try:
         read_dict = count_reads(samfile, contig_manager, args)
     except OSError as e:
-        sys.stderr.write(str(e))
-        sys.stderr.flush()
+        print(str(e), file=sys.stderr, flush=True)
         sys.exit(1)
     finally:
         samfile.close()
 
-    sys.stderr.write("Counter: finished counting reads\n")
-    sys.stderr.flush()
+    for name, contig in sorted(self.contigs_seen.items()):
+        print(name, contig.reads, sep=" ", file=sys.stderr)
+
+    print("Counter: finished counting reads", file=sys.stderr, flush=True)
 
     for contig, array in read_dict.items():
         read_dict[contig] = csr_matrix(array)
         del(array)
 
-    sys.stderr.write("Counter: finished converting numpy arrays and lil matrices to csr_matrix\n")
-    sys.stderr.flush()
+    print("Counter: finished converting numpy arrays and lil matrices to csr_matrix", file=sys.stderr, flush=True)
 
     with open(args.outfile, "wb") as outfile:
         pickle.dump(read_dict, outfile, pickle.HIGHEST_PROTOCOL)
 
-    sys.stderr.write("Counter: finished pickling matrices\n")
-    sys.stderr.flush()
+    print("Counter: finished pickling matrices", file=sys.stderr, flush=True)
     sys.exit()
