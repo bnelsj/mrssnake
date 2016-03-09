@@ -57,7 +57,8 @@ class ContigManager:
     def rebalance(self):
         new_used_bases = 0
         new_array_contigs = []
-        for name, contig in sorted(self.contigs_seen.items()):
+        for name, contig in sorted(self.contigs_seen.items(), key=lambda x: x[1], reverse=True):
+            contig = self.contigs_seen[name]
             if new_used_bases + contig.size <= self.max_bases:
                 new_array_contigs.append(contig.name)
                 new_used_bases += contig.size
@@ -261,7 +262,8 @@ if __name__ == "__main__":
     finally:
         samfile.close()
 
-    for name, contig in sorted(contig_manager.contigs_seen.items()):
+    print("Counter: printing read counts", file=sys.stderr)
+    for name, contig in sorted(contig_manager.contigs_seen.items(), key=lambda x: x[1], reverse=True):
         print(name, contig.reads, sep=" ", file=sys.stderr)
 
     print("Counter: finished counting reads", file=sys.stderr, flush=True)
