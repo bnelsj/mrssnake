@@ -299,64 +299,64 @@ int get_reads(std::vector<interval> & chunks,
 void read_index(std::vector<interval> & chunks, 
 		std::string & fn) {
  
- const char * file_name = fn.c_str();
-  std::string index_name = fn + ".bai";
-  long chunk_counter=0;
-  FILE *ptr_myfile;
-  //std::vector <struct interval> chunks;
+ 	const char * file_name = fn.c_str();
+  	std::string index_name = fn + ".bai";
+	long chunk_counter=0;
+	FILE *ptr_myfile;
+	  //std::vector <struct interval> chunks;
   
-  ptr_myfile = fopen(index_name.c_str(),"rb");
-  
-  if(!ptr_myfile) {
-    std::cerr << "Unable to open file." << std::endl;
-    exit(1);
-  }
-  
-  char magic[4];
-  fread(&magic, sizeof(char), 4, ptr_myfile);	
-  
-  int32_t n_ref;
-  fread(&n_ref,sizeof(int32_t),1,ptr_myfile);
-  
-  int32_t nn;
-  for(nn = 0; nn < n_ref; ++nn){
-    
-    int32_t n_bin;
-    fread(&n_bin,sizeof(int32_t),1,ptr_myfile);
-    
-    int32_t i;
-    for (i = 0; i < n_bin; ++i) {
-      uint32_t bin; 
-      fread(&bin,sizeof(uint32_t),1,ptr_myfile);
-      
-      int32_t n_chunk;
-      fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
-      
-      int32_t j;
-      for (j = 0; j < n_chunk; ++j) {
-	uint64_t chunk_beg, chunk_end;
-	interval tmp;
-	fread(&chunk_beg,sizeof(uint64_t),1,ptr_myfile);
-	fread(&chunk_end,sizeof(uint64_t),1,ptr_myfile);
+	ptr_myfile = fopen(index_name.c_str(),"rb");
 
-	tmp.start = chunk_beg;
-	tmp.end = chunk_end;
-	chunks.push_back(tmp);		
-      }
-    }
-    int32_t n_intv;
-    fread(&n_intv,sizeof(int32_t),1,ptr_myfile);
-    
-    int32_t k; uint64_t ioffset;
-    for(k = 0; k < n_intv; ++k){
-      fread(&ioffset,sizeof(uint64_t),1,ptr_myfile);
-    } 
-  }
+	if(!ptr_myfile) {
+		std::cerr << "Unable to open file." << std::endl;
+		exit(1);
+	}
 
-  uint64_t unmapped;
-  fread(&unmapped, sizeof(uint64_t),1, ptr_myfile);
- 
-  fclose(ptr_myfile); 
+	char magic[4];
+	fread(&magic, sizeof(char), 4, ptr_myfile);	
+
+	int32_t n_ref;
+	fread(&n_ref,sizeof(int32_t),1,ptr_myfile);
+	  
+	int32_t nn;
+	for(nn = 0; nn < n_ref; ++nn){
+		
+		int32_t n_bin;
+		fread(&n_bin,sizeof(int32_t),1,ptr_myfile);
+		
+		int32_t i;
+		for (i = 0; i < n_bin; ++i) {
+			uint32_t bin; 
+		  	fread(&bin,sizeof(uint32_t),1,ptr_myfile);
+		  
+		  	int32_t n_chunk;
+		  	fread(&n_chunk,sizeof(int32_t),1,ptr_myfile);
+		  
+		  	int32_t j;
+		  	for (j = 0; j < n_chunk; ++j) {
+				uint64_t chunk_beg, chunk_end;
+				interval tmp;
+				fread(&chunk_beg,sizeof(uint64_t),1,ptr_myfile);
+				fread(&chunk_end,sizeof(uint64_t),1,ptr_myfile);
+
+				tmp.start = chunk_beg;
+				tmp.end = chunk_end;
+				chunks.push_back(tmp);		
+		  	}
+		}
+		int32_t n_intv;
+		fread(&n_intv,sizeof(int32_t),1,ptr_myfile);
+		
+		int32_t k; uint64_t ioffset;
+		for(k = 0; k < n_intv; ++k){
+			fread(&ioffset,sizeof(uint64_t),1,ptr_myfile);
+		} 
+	}
+
+	uint64_t unmapped;
+	fread(&unmapped, sizeof(uint64_t),1, ptr_myfile);
+	 
+	fclose(ptr_myfile); 
 }
 
 
@@ -371,17 +371,18 @@ void read_index(std::vector<interval> & chunks,
 int main( int argc, char** argv)
 {
      
-  int parse = parseOpts(argc, argv);
-  if(parse != 1){
-    std::cerr << "FATAL: unable to parse command line correctly." << std::endl;
-    exit(1);
-  }
+	int parse = parseOpts(argc, argv);
+	if(parse != 1){
+		std::cerr << "FATAL: unable to parse command line correctly." << std::endl;
+		exit(1);
+	}
 
- std::vector<interval> idx;
+ 	std::vector<interval> idx;
 
- read_index(idx, globalOpts.file);
-
- get_reads(idx, globalOpts.file);
+ 	read_index(idx, globalOpts.file);
+	std::vector<interval> chunks;
+	chunks = get_chunk_range(idx, globalOpts.part, globalOpts.nparts);
+ 	get_reads(chunks, globalOpts.file);
     
   return 0;
 }
