@@ -262,11 +262,12 @@ if __name__ == "__main__":
     finally:
         samfile.close()
 
+    total_reads = sum([contig.reads for name, contig in contig_manager.contigs_seen.items()])
     print("Counter: printing read counts", file=sys.stderr)
     for name, contig in sorted(contig_manager.contigs_seen.items(), key=lambda x: x[1], reverse=True):
         print(name, contig.reads, sep=" ", file=sys.stderr)
 
-    print("Counter: finished counting reads", file=sys.stderr, flush=True)
+    print("Counter: finished counting %d reads" % total_reads, file=sys.stderr, flush=True)
 
     for contig, array in read_dict.items():
         read_dict[contig] = csr_matrix(array)
