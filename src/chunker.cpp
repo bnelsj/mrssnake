@@ -208,7 +208,7 @@ int get_reads(std::vector<interval> & chunks,
 	    //std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
 	    
 	    int32_t r, refID, pos, lseq, nextRefID, nextPos, tlen;
-	    uint32_t bin_mq_nl, flag_nc, flag, bin, mq, qnl;
+	    uint32_t bin_mq_nl, flag_nc, bin, mq, qnl;
 	    
 	    bgzf_read(bam, &r,         sizeof(r));
 	    bgzf_read(bam, &refID,     sizeof(refID));
@@ -224,8 +224,8 @@ int get_reads(std::vector<interval> & chunks,
 	    mq  = bin_mq_nl >> 8 & 0xff;
 	    qnl = bin_mq_nl &      0xff;
 	    
-	    uint32_t test, cigar_ops;
-	    test = flag_nc >> 16;
+	    uint32_t flag, cigar_ops;
+	    flag = flag_nc >> 16;
 	    cigar_ops = flag_nc & 0xFFFF;
 	    
 	    bgzf_read(bam, &lseq,      sizeof(lseq));
@@ -244,10 +244,15 @@ int get_reads(std::vector<interval> & chunks,
 	    bgzf_read(bam, cigarOps, sizeof(uint32_t)*cigar_ops);
 	    r-= sizeof(uint32_t) * cigar_ops;
 	    
+		bool hard = false;
+
 	    std::stringstream cig;
 	    for(int i = 0; i < cigar_ops; i++){
 	      cig << (cigarOps[i] >> BAM_CIGAR_SHIFT);
 	      cig << BAM_CIGAR_LOOKUP[ (cigarOps[i] & BAM_CIGAR_MASK) ];
+			if( BAM_CIGAR_LOOKUP[ (cigarOps[i] & BAM_CIGAR_MASK) ] == 'H'){
+	          hard = true;
+	        }    
 	    }
 	    
 	    uint8_t seqByte[(lseq+1)/2];
@@ -284,10 +289,12 @@ int get_reads(std::vector<interval> & chunks,
 	    //		std::cerr << "Seq:  " << seqString << std::endl;
 	    //		std::cerr << "Qual: " << qual << std::endl;
 	    //		std::cerr << "r: " << r << " Rest: " << rest << std::endl;
-	    
-	    chunk_read(seqString, globalOpts.chunk_size);
+
+        // Exclude duplicate reads, supplementary alignments, and reads with hard stops
+	    if(((flag & 0xC00) == 0) and (!hard)) {
+	      chunk_read(seqString, globalOpts.chunk_size);
+        } 
 	  }
-	  
 	}
 	//std::cerr << "Index: " << index << std::endl;
    	bgzf_close(bam);
