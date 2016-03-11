@@ -1,7 +1,10 @@
 ---
-reference: hg19
+reference: hg19_aws
 manifest: manifest.txt
 
+hg19_aws:
+    masked_ref: /home/ec2-user/reference/hg19_masked
+    contigs: /home/ec2-user/reference/hg19_masked.contigs.txt
 hg19:
     masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked
     contigs: /net/eichler/vol7/home/psudmant/genomes/contigs/hg19_contigs.txt
@@ -20,3 +23,6 @@ array_contigs:
 auto_assign: True
 max_bp_in_mem: 300000000
 
+# Set amazon to True if running on an EC2 instance
+amazon: True
+tmpdir: $TMPDIR

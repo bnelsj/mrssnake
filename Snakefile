@@ -6,7 +6,6 @@ import json
 from MappingJob import *
 from subprocess import CalledProcessError
 
-shell.prefix("source config.sh; ")
 
 if config == {}:
     configfile: "config.yaml"
@@ -21,6 +20,12 @@ AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
 ARRAY_CONTIGS = config["array_contigs"]
+
+AMAZON = config["amazon"]
+TMPDIR = config["tmpdir"]
+
+if not AMAZON:
+    shell.prefix("source config.sh; ")
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -56,6 +61,7 @@ rule merge_sparse_matrices:
     input: expand("region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS, sample = SAMPLES.keys(), part = range(BAM_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
+    log: "log/merge/{sample}.txt"
     benchmark: "benchmarks/merger/{sample}.json"
     run:
         shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
@@ -77,9 +83,18 @@ rule map_and_count:
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
+    log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
+    shadow: AMAZON
     run:
-        fifo = "$TMPDIR/mrsfast_fifo"
         masked_ref_name = os.path.basename(MASKED_REF)
+        if AMAZON:
+            fifo = "mrsfast_fifo"
+            rsync_opts = ""
+            mrsfast_ref_path = MASKED_REF
+        else:
+            fifo = "%s/mrsfast_fifo" % TMPDIR
+            rsync_opts = "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{MASKED_REF}; echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
+            mrsfast_ref_path = "/var/tmp/%s" % masked_ref_name
 
         if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
             common_contigs = "--common_contigs " + " ".join(ARRAY_CONTIGS)
@@ -94,12 +109,9 @@ rule map_and_count:
         shell(
             "hostname; "
             "mkfifo {fifo}; "
-            "mkdir -p /var/tmp/mrsfast_index; "
-            "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; "
-            "touch /var/tmp/mrsfast_index/{MASKED_REF}; "
-            "echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
+            "{rsync_opts}"
             "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} | "
-            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
+            "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
 
