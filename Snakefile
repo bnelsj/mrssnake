@@ -68,7 +68,7 @@ rule merge_sparse_matrices:
             shell("python3 merger.py {output} --infiles {input}")
         else:
             shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-            shell("python3 merger.py {output} --infiles {input}")
+            shell("python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infiles {input}")
             shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
             shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
