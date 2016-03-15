@@ -96,7 +96,7 @@ rule map_and_count:
             mrsfast_ref_path = MASKED_REF
         else:
             fifo = "%s/mrsfast_fifo" % TMPDIR
-            rsync_opts = "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{MASKED_REF}; echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
+            rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{0}; echo Finished rsync from {0} to /var/tmp/mrsfast_index > /dev/stderr; ".format(MASKED_REF)
             mrsfast_ref_path = "/var/tmp/%s" % masked_ref_name
 
         if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
@@ -114,7 +114,7 @@ rule map_and_count:
             "mkfifo {fifo}; "
             "{rsync_opts}"
             "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} | "
-            "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
+            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
 
