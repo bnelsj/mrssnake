@@ -56,7 +56,7 @@ class ContigManager:
             self.used_bases += contig.size
 
     def reset_read_counts(self):
-        for contig in self.contigs_seen:
+        for name, contig in self.contigs_seen.items():
             contig.total_reads += contig.reads
             contig.reads = 0
 
