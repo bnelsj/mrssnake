@@ -73,9 +73,10 @@ struct options{
    int part;
    int nparts;
    int chunk_size;
+   int orphan_parts;
 }globalOpts;
 
-static const char *optString = "b:p:n:c";
+static const char *optString = "b:p:n:c:u:";
 
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
@@ -83,37 +84,29 @@ int parseOpts(int argc, char** argv)
   int opt = 0;
   globalOpts.file = "NA";
   globalOpts.chunk_size = 36;
+  globalOpts.orphan_parts = 0;
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
     case 'h':
-      {
-	std::cerr << "Useage" << std::endl;
-      }
+	  std::cerr << "Useage" << std::endl;
     case 'b':
-      {
-	globalOpts.file = optarg;
-	break;
-      }
+	  globalOpts.file = optarg;
+	  break;
     case 'p':
-      {
-	globalOpts.part = atoi(optarg);
-	break;
-      }
+	  globalOpts.part = atoi(optarg);
+	  break;
     case 'n':
-      {
-	globalOpts.nparts = atoi(optarg);
-	break;
-      }
+	  globalOpts.nparts = atoi(optarg);
+	  break;
     case 'c':
-      {
-	globalOpts.chunk_size = atoi(optarg);
-	break;
-      }
+	  globalOpts.chunk_size = atoi(optarg);
+	  break;
+	case 'u':
+      globalOpts.orphan_parts = atoi(optarg);
+      break;
     case '?':
-      {
-	break;
-      }
+	  break;
     }
     opt = getopt( argc, argv, optString ); 
   }
@@ -143,11 +136,18 @@ void get_chunk_range(std::vector<interval> &chunks,
 	int range_size;
 	int nchunks = chunks.size();
 
+	if(part >= nparts) {
+		interval chunk;
+		chunk.start = chunks[chunks.size()-1].end;
+		chunk.end = -1;
+		//std::cerr << chunk.end << std::endl;
+        chunks_to_read.push_back(chunk);
+		return;
+	}
 	range_size = chunks.size() / nparts;
 	chunk_range.start = range_size * part;
 	part == nparts-1 ? chunk_range.end = nchunks : chunk_range.end = range_size * part + range_size;
 	
-	//chunks_to_read(&chunks[chunk_range.start], &chunks[chunk_range.end]);
 	int i;
 	for(i = 0; i < chunks.size(); ++i) {
 		if(i >= chunk_range.start and i < chunk_range.end) {
@@ -191,7 +191,16 @@ int get_reads(std::vector<interval> & chunks,
   
   	BGZF* bam;
   	bam = bgzf_open(bamfile.c_str(), "r");
-	
+
+	int remainder, orphan_parts;
+    if(globalOpts.part >= globalOpts.nparts) {
+      orphan_parts = globalOpts.orphan_parts;
+      remainder = globalOpts.part - globalOpts.nparts;
+    } else {
+      orphan_parts = 1;
+      remainder = 0;
+    }
+
   	int index = 0;
 	for(std::vector<interval>::iterator it = chunks.begin(); 
 	    it != chunks.end(); it++){
@@ -203,14 +212,15 @@ int get_reads(std::vector<interval> & chunks,
 	  //std::cerr << it->start << " " << it->end << std::endl;
 	  
 	  while(bgzf_tell(bam) < it->end) {
-	    index += 1;
-	    
 	    //std::cerr << "offset: " << bgzf_tell(bam) << std::endl;
 	    
 	    int32_t r, refID, pos, lseq, nextRefID, nextPos, tlen;
 	    uint32_t bin_mq_nl, flag_nc, bin, mq, qnl;
 	    
-	    bgzf_read(bam, &r,         sizeof(r));
+	    if(bgzf_read(bam, &r, sizeof(r)) <= 0) {
+			break;
+		}
+
 	    bgzf_read(bam, &refID,     sizeof(refID));
 	    bgzf_read(bam, &pos,       sizeof(pos));
 	    bgzf_read(bam, &bin_mq_nl, sizeof(bin_mq_nl));
@@ -292,7 +302,13 @@ int get_reads(std::vector<interval> & chunks,
 
         // Exclude duplicate reads, supplementary alignments, and reads with hard stops
 	    if(((flag & 0xC00) == 0) and (!hard)) {
-	      chunk_read(seqString, globalOpts.chunk_size);
+		  //std::cout << refID << "\t" << pos << std::endl;
+		  if(globalOpts.part < globalOpts.nparts) {
+            chunk_read(seqString, globalOpts.chunk_size);
+          } else if(index % orphan_parts == remainder) {
+	        chunk_read(seqString, globalOpts.chunk_size);
+          }
+          index += 1;
         } 
 	  }
 	}
@@ -387,15 +403,18 @@ void read_index(std::vector<interval> & chunks,
 
 int main( int argc, char** argv)
 {
-  
   int parse = parseOpts(argc, argv);
   if(parse != 1){
     std::cerr << "FATAL: unable to parse command line correctly." << std::endl;
     exit(1);
   }
-  
+  if(globalOpts.part > globalOpts.nparts + globalOpts.orphan_parts) {
+    std::cerr << "ERROR: partition number out of range. Must be <" << globalOpts.nparts + globalOpts.orphan_parts << std::endl;
+    exit(1);
+  }
+ 
   std::vector<interval> chunks, chunks_to_read;
-  
+
   read_index(chunks, globalOpts.file);
   
   get_chunk_range(chunks, chunks_to_read, globalOpts.part, globalOpts.nparts);

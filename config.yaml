@@ -1,5 +1,5 @@
 ---
-reference: hg19_aws
+reference: hg19
 manifest: manifest.txt
 
 hg19_aws:
@@ -16,13 +16,14 @@ custom_contig:
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
 bam_partitions: 500
+unmapped_partitions: 15
 
 array_contigs: 
 
-# If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 1 million reads
+# If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 100K reads
 auto_assign: True
 max_bp_in_mem: 300000000
 
 # Set amazon to True if running on an EC2 instance
-amazon: True
+amazon: False
 tmpdir: $TMPDIR
