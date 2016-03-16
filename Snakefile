@@ -58,16 +58,19 @@ rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS, sample = SAMPLES.keys(), part = range(BAM_PARTITIONS))
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     log: "log/merge/{sample}.txt"
     benchmark: "benchmarks/merger/{sample}.json"
     run:
-        shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-        shell("python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infiles {input}")
-        shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
-        shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
+        if AMAZON:
+            shell("python3 merger.py {output} --infiles {input}")
+        else:
+            shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
+            shell("python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infiles {input}")
+            shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
+            shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 #rule merge_matrices_live:
 #    input: lambda wildcards: SAMPLES[wildcards.sample]
@@ -93,7 +96,7 @@ rule map_and_count:
             mrsfast_ref_path = MASKED_REF
         else:
             fifo = "%s/mrsfast_fifo" % TMPDIR
-            rsync_opts = "rsync {MASKED_REF}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{MASKED_REF}; echo Finished rsync from {MASKED_REF} to /var/tmp/mrsfast_index > /dev/stderr; "
+            rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{0}; echo Finished rsync from {0} to /var/tmp/mrsfast_index > /dev/stderr; ".format(MASKED_REF)
             mrsfast_ref_path = "/var/tmp/%s" % masked_ref_name
 
         if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
@@ -111,7 +114,7 @@ rule map_and_count:
             "mkfifo {fifo}; "
             "{rsync_opts}"
             "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} | "
-            "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
+            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
 
