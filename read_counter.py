@@ -23,6 +23,7 @@ class Contig:
     def __init__(self, name, size):
         self.name = name
         self.size = size
+        self.total_reads = 0
         self.reads = 0
     def __eq__(self, other):
         return self.reads / self.size == other.reads / other.size
@@ -54,6 +55,11 @@ class ContigManager:
             self.array_contigs.append(contig.name)
             self.used_bases += contig.size
 
+    def reset_read_counts(self):
+        for name, contig in self.contigs_seen.items():
+            contig.total_reads += contig.reads
+            contig.reads = 0
+
     def rebalance(self):
         new_used_bases = 0
         new_array_contigs = []
@@ -65,6 +71,7 @@ class ContigManager:
 
         self.array_contigs = new_array_contigs
         self.used_bases = new_used_bases
+        self.reset_read_counts()
 
 
 def get_array_contigs(contigs, args):
@@ -262,10 +269,10 @@ if __name__ == "__main__":
     finally:
         samfile.close()
 
-    total_reads = sum([contig.reads for name, contig in contig_manager.contigs_seen.items()])
+    total_reads = sum([contig.total_reads for name, contig in contig_manager.contigs_seen.items()])
     print("Counter: printing read counts", file=sys.stderr)
     for name, contig in sorted(contig_manager.contigs_seen.items(), key=lambda x: x[1], reverse=True):
-        print(name, contig.reads, sep=" ", file=sys.stderr)
+        print(name, contig.total_reads, sep=" ", file=sys.stderr)
 
     print("Counter: finished counting %d reads" % total_reads, file=sys.stderr, flush=True)
 
@@ -278,5 +285,5 @@ if __name__ == "__main__":
     with open(args.outfile, "wb") as outfile:
         pickle.dump(read_dict, outfile, pickle.HIGHEST_PROTOCOL)
 
-    print("Counter: finished pickling matrices", file=sys.stderr, flush=True)
+    print("Counter: finished pickling matrices: %s" % args.outfile, file=sys.stderr, flush=True)
     sys.exit()

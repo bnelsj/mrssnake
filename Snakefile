@@ -16,6 +16,7 @@ MASKED_REF = config[REFERENCE]["masked_ref"]
 CONTIGS_FILE = config[REFERENCE]["contigs"]
 
 BAM_PARTITIONS = config["bam_partitions"]
+UNMAPPED_PARTITIONS = config["unmapped_partitions"]
 AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
@@ -58,7 +59,7 @@ rule all:
     input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS))
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     log: "log/merge/{sample}.txt"
@@ -114,7 +115,7 @@ rule map_and_count:
             "hostname; "
             "mkfifo {fifo}; "
             "{rsync_opts}"
-            "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} | "
+            "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
