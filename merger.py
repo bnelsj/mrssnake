@@ -6,11 +6,12 @@ try:
 except ImportError:
     import pickle
 
+import time
 import sys
 import argparse
 import tables
 import numpy as np
-from scipy.sparse import lil_matrix
+from scipy.sparse import lil_matrix, csr_matrix
 
 def write_to_h5(counts, fout):
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
@@ -22,7 +23,7 @@ def write_to_h5(counts, fout):
         nedists = nrows // 2
         carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
 
-        wssd_contig = matrix.toarray().T
+        wssd_contig = matrix.T
 
         # Add depth counts
         carray_empty[:, :, 0] = wssd_contig[:, nedists:]
@@ -42,6 +43,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    start_time = time.time()
+
     fout = tables.open_file(args.outfile, mode="w")
     sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
     contigs = {}
@@ -55,16 +58,26 @@ if __name__ == "__main__":
             dat = pickle.load(file)
 
             for contig, matrix in dat.items():
-                if contig not in contigs:
-                    contigs[contig] = matrix.tocsr()
+                if isinstance(matrix, csr_matrix) or isinstance(matrix, lil_matrix):
+                    if contig not in contigs:
+                        contigs[contig] = matrix.toarray()
+                    else:
+                        contigs[contig] += matrix.toarray()
+                elif isinstance(matrix, np.ndarray):
+                    if contig not in contigs:
+                        contigs[contig] = matrix
+                    else:
+                        contigs[contig] += matrix
                 else:
-                    contigs[contig] += matrix.tocsr()
-                del(matrix)
+                    print("Error: unrecognized data type for contig %s: %s" % (contig, matrix.__class__.__name__), file=sys.stderr, flush=True)
+                    sys.exit(1)
 
-    sys.stdout.write("Finished loading pickles. Creating h5 file: %s\n" % args.outfile)
-    sys.stdout.flush()
+                del(matrix)
+    
+    print("Finished loading pickles. Creating h5 file: %s" % args.outfile, file=sys.stdout, flush=True)
 
     write_to_h5(contigs, fout)
-    sys.stdout.write("Finished writing wssd_out_file. Closing.\n")
-    sys.stdout.flush()
+    finish_time = time.time()
+    total_time = finish_time - start_time
+    print("Finished writing wssd_out_file in %d seconds. Closing." % total_time, file=sys.stdout, flush=True)
     fout.close()
