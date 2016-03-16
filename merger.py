@@ -8,6 +8,7 @@ except ImportError:
 
 import sys
 import argparse
+import glob
 import tables
 import numpy as np
 from scipy.sparse import lil_matrix
@@ -38,7 +39,8 @@ def write_to_h5(counts, fout):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("outfile")
-    parser.add_argument("--infiles", required=True, nargs="+")
+    parser.add_argument("--infiles", nargs="+", default = None)
+    parser.add_argument("--infile_glob", default = None)
 
     args = parser.parse_args()
 
@@ -46,9 +48,17 @@ if __name__ == "__main__":
     sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
     contigs = {}
 
-    ninfiles = len(args.infiles)
+    infiles = []
 
-    for i, infile in enumerate(args.infiles):
+    if args.infile_glob is not None:
+        infiles.extend(glob.glob(args.infile_glob))
+
+    if args.infiles is not None:
+        infiles.extend(args.infiles)
+
+    ninfiles = len(infiles)
+
+    for i, infile in enumerate(infiles):
         with open(infile, "rb") as file:
             sys.stdout.write("Loading pickle %d of %d: %s\n" % (i+1, ninfiles, infile))
             sys.stdout.flush()

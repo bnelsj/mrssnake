@@ -64,11 +64,12 @@ rule merge_sparse_matrices:
     log: "log/merge/{sample}.txt"
     benchmark: "benchmarks/merger/{sample}.json"
     run:
+        infile_glob = os.path.commonprefix(input) + "*"
         if AMAZON:
-            shell("python3 merger.py {output} --infiles {input}")
+            shell('python3 merger.py {output} --infile_glob "{infile_glob}"')
         else:
             shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-            shell("python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infiles {input}")
+            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}"')
             shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
             shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
