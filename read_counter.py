@@ -1,10 +1,9 @@
 from __future__ import print_function
 from __future__ import division
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+from pickle import HIGHEST_PROTOCOL
+
+import shelve
 
 import sys
 import argparse
@@ -12,8 +11,7 @@ import argparse
 import pysam
 import numpy as np
 
-from scipy.sparse import lil_matrix
-from scipy.sparse import csr_matrix
+from scipy.sparse import lil_matrix, bsr_matrix
 from functools import total_ordering
 import time
 import gc
@@ -282,13 +280,13 @@ if __name__ == "__main__":
     print("Counter: finished counting %d reads" % total_reads, file=logfile, flush=True)
 
     for contig, array in read_dict.items():
-        read_dict[contig] = csr_matrix(array)
+        read_dict[contig] = bsr_matrix(array)
         del(array)
 
-    print("Counter: finished converting numpy arrays and lil matrices to csr_matrix", file=logfile, flush=True)
+    print("Counter: finished converting numpy arrays and lil matrices to bsr_matrix", file=logfile, flush=True)
 
-    with open(args.outfile, "wb") as outfile:
-        pickle.dump(read_dict, outfile, pickle.HIGHEST_PROTOCOL)
+    with shelve.open(args.outfile, protocol = HIGHEST_PROTOCOL) as outfile:
+        outfile.update(read_dict)
 
     print("Counter: finished pickling matrices: %s" % args.outfile, file=logfile, flush=True)
     if logfile is not sys.stderr:
