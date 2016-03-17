@@ -12,6 +12,9 @@ import numpy as np
 from scipy.sparse import issparse
 
 def add_contents_to_contigs(dat, contigs):
+    """Take a dictionary-like object of matrices, add matrices to contigs dictionary.
+       Converts matrices to np.ndarray automatically.
+    """
     for contig, matrix in dat.items():
         if issparse(matrix):
             matrix = matrix.toarray()
@@ -60,6 +63,9 @@ def load_matrices_post(infiles, contigs):
     return contigs
 
 def write_to_h5(counts, fout):
+    """Write counts (dictionary of contig matrices) to fout hdf5 file.
+       Outfile is in wssd_out_file format.   
+    """
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
     for i, (contig, matrix) in enumerate(counts.items()):
@@ -83,10 +89,10 @@ def write_to_h5(counts, fout):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("outfile")
-    parser.add_argument("--infiles", nargs="+", default = None)
-    parser.add_argument("--infile_glob", default = None)
-    parser.add_argument("--live_merge", default = False)
+    parser.add_argument("outfile", help= "Path to output wssd_out_file")
+    parser.add_argument("--infiles", nargs="+", default = None, help = "List of input shelves to merge")
+    parser.add_argument("--infile_glob", default = None, help = "glob string for infiles")
+    parser.add_argument("--live_merge", default = False, help = "Start merging infiles before they are all finished? (Default: %(default)s)")
 
     args = parser.parse_args()
 
