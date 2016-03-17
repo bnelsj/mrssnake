@@ -61,7 +61,7 @@ rule all:
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=32G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
+    params: sge_opts = "-l mfree=60G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     log: "log/merge/{sample}.txt"
     benchmark: "benchmarks/merger/{sample}.json"
     run:
