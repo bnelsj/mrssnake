@@ -24,6 +24,13 @@ ARRAY_CONTIGS = config["array_contigs"]
 
 AMAZON = config["amazon"]
 TMPDIR = config["tmpdir"]
+LIVE_MERGE = config["live_merge"]
+CLEAN_TEMP_FILES = config["clean_temp_files"]
+
+if LIVE_MERGE:
+    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
+else:
+    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
 
 if not AMAZON:
     shell.prefix("source config.sh; ")
@@ -46,8 +53,7 @@ with open(MANIFEST, "r") as reader:
         SAMPLES[sn] = bam
 
 def get_sparse_matrices_from_sample(wildcards):
-    names = SAMPLE_MAPPING_JOBS[wildcards.sample].keys()
-    return ["region_matrices/%s/%s.%s.pkl" % (wildcards.sample, wildcards.sample, region) for region in names]
+    return ["region_matrices/%s/%s.%d_%d.pkl" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
 def get_multiple_contigs(sample, chr, num):
     names = SAMPLE_MAPPING_JOBS[sample]["%s.%s" % (chr, num)]
@@ -56,14 +62,29 @@ def get_multiple_contigs(sample, chr, num):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input: expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys())
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys()),
+            expand("finished/{sample}", sample = SAMPLES.keys())
+
+rule clean:
+    input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)),
+            to_keep = "mapping/{sample}/{sample}/wssd_out_file"
+    output: touch("finished/{sample}")
+    params: sge_opts = "-l h_rt=01:00:00"
+    run:
+        if CLEAN_TEMP_FILES:
+            remove_glob = os.path.commonprefix(input.to_remove) + "*"
+            shell("rm {remove_glob}")
+
+            if AMAZON:
+                dirname = os.path.dirname(input.to_remove[0])
+                shell('aws s3 rm s3://{bucket}/{dirname}/ --recursive --exclude wssd_out_file')
 
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=60G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
+    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
     log: "log/merge/{sample}.txt"
-    resources: mem=32
+    resources: mem=40
     benchmark: "benchmarks/merger/{sample}.json"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
@@ -74,19 +95,33 @@ rule merge_sparse_matrices:
             shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}"')
             shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
             shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
+        if AMAZON:
+            "aws s3 cp {output} s3://{BUCKET}/{output}"
 
-#rule merge_matrices_live:
-#    input: lambda wildcards: SAMPLES[wildcards.sample]
-#    output: "mapping/{sample}/{sample}/wssd_out_file_live"
-#    params: sge_opts = "-l mfree=32G -N merge_{sample}", files = get_sparse_matrices_from_sample
-#    priority: 10
-#    shell:
-#        "python3 live_merger.py {output} --infiles {params.files}"
+rule merge_sparse_matrices_live:
+    input: bam = lambda wildcards: SAMPLES[wildcards.sample], chunker = "bin/bam_chunker", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
+    output: "mapping/{sample}/{sample}/wssd_out_file"
+    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
+    log: "log/merge/{sample}.txt"
+    resources: mem=40
+    benchmark: "benchmarks/merger/{sample}.json"
+    priority: 20
+    run:
+        infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
+        if AMAZON:
+            shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge')
+        else:
+            shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
+            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --live_merge')
+            shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
+            shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
+        if AMAZON:
+            "aws s3 cp {output} s3://{BUCKET}/{output}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker"
+    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
     output: "region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS
-    params: sge_opts = "-l mfree=4G -N map_count"
+    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=10:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
     resources: mem=4
@@ -121,11 +156,14 @@ rule map_and_count:
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
+        if AMAZON:
+            shell("aws s3 cp {output} s3://{BUCKET}/{output}")
 
 rule check_bam_files:
     input: [bam for key, bam in SAMPLES.items()]
     output: touch("BAMS_READABLE")
     params: sge_opts = ""
+    priority: 50
     run:
         for bamfile in input:
             try:
