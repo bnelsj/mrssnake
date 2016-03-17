@@ -63,6 +63,7 @@ rule merge_sparse_matrices:
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=60G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample"
     log: "log/merge/{sample}.txt"
+    resources: mem=32
     benchmark: "benchmarks/merger/{sample}.json"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
@@ -88,6 +89,7 @@ rule map_and_count:
     params: sge_opts = "-l mfree=4G -N map_count"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
+    resources: mem=4
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     shadow: AMAZON
     run:

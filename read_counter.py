@@ -229,6 +229,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    run_start = time.time()
+
     if args.log is not sys.stderr:
         logfile = open(args.log, "w")
     else:
@@ -288,7 +290,11 @@ if __name__ == "__main__":
     with shelve.open(args.outfile, protocol = HIGHEST_PROTOCOL) as outfile:
         outfile.update(read_dict)
 
-    print("Counter: finished pickling matrices: %s" % args.outfile, file=logfile, flush=True)
+    run_end = time.time()
+    total_runtime = run_end - run_start
+
+    print("Counter: finished pickling matrices: %s" % args.outfile, file=logfile)
+    print("Counter: total runtime: %d" % total_runtime, file=logfile, flush=True)
     if logfile is not sys.stderr:
         logfile.close()
     sys.exit()
