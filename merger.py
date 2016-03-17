@@ -11,12 +11,59 @@ import tables
 import numpy as np
 from scipy.sparse import issparse
 
+def add_contents_to_contigs(dat, contigs):
+    for contig, matrix in dat.items():
+        if issparse(matrix):
+            matrix = matrix.toarray()
+        if isinstance(matrix, np.ndarray):
+            if contig not in contigs:
+                contigs[contig] = matrix
+            else:
+                contigs[contig] += matrix
+        else:
+            print("Error: unrecognized data type for contig %s: %s" % (contig, matrix.__class__.__name__), file=sys.stderr, flush=True)
+            sys.exit(1)
+
+        del(matrix)
+    return(contigs)
+
+def load_matrices_live(infiles, contigs):
+    """Load infiles to contigs dictionary as they are finished."""
+    infiles = set(infiles)
+    total_infiles = len(infiles)
+    processed_infiles = set()
+    while len(infiles) > 0:
+        for infile in infiles:
+            # Check if infile exists and hasn't been modified in 5 minutes
+            if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
+                try:
+                    dat = shelve.open(infile, flag="r")
+                except error as e:
+                    print("Error: %s: %s" % (infile, str(e)), file=sys.stderr, flush=True)
+                    continue
+                else:
+                    contigs = add_contents_to_contigs(dat, contigs)
+                    dat.close()
+                    processed_infiles.add(infile)
+                    print("Loaded pickle %d of %d: %s" % (len(processed_infiles), total_infiles, infile), file=sys.stdout, flush=True)
+        infiles -= processed_infiles
+        time.sleep(30)
+    return contigs
+
+def load_matrices_post(infiles, contigs):
+    """Load infiles to contigs dictionary. Assumes all infiles are complete."""
+    for i, infile in enumerate(infiles):
+        with shelve.open(infile) as dat:
+            print("Loading shelve %d of %d: %s" % (i+1, len(infiles), infile), file=sys.stdout, flush=True)
+
+            contigs = add_contents_to_contigs(dat, contigs)
+    return contigs
+
 def write_to_h5(counts, fout):
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
 
     for i, (contig, matrix) in enumerate(counts.items()):
-        sys.stdout.write("Merger: %d Creating array for %s\n" %(i+1, contig))
-        sys.stdout.flush()
+        print("Merger: %d Creating array for %s" %(i+1, contig), file=sys.stdout, flush=True)
         nrows, ncols = matrix.shape
         nedists = nrows // 2
         carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
@@ -39,13 +86,14 @@ if __name__ == "__main__":
     parser.add_argument("outfile")
     parser.add_argument("--infiles", nargs="+", default = None)
     parser.add_argument("--infile_glob", default = None)
+    parser.add_argument("--live_merge", default = False)
 
     args = parser.parse_args()
 
     start_time = time.time()
 
     fout = tables.open_file(args.outfile, mode="w")
-    sys.stdout.write("Successfully opened outfile %s\n" % args.outfile)
+    print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
     contigs = {}
 
     infiles = []
@@ -56,30 +104,14 @@ if __name__ == "__main__":
     if args.infiles is not None:
         infiles.extend(args.infiles)
 
-    ninfiles = len(infiles)
+    if args.live_merge:
+        contigs = load_matrices_live(infiles, contigs)
+    else:
+        contigs = load_matrices_post(infiles, contigs)
 
-    for i, infile in enumerate(infiles):
-        with shelve.open(infile) as dat:
-            print("Loading shelve %d of %d: %s\n" % (i+1, ninfiles, infile), file=sys.stderr, flush=True)
-
-            for contig, matrix in dat.items():
-                if issparse(matrix):
-                    matrix = matrix.toarray()
-                if isinstance(matrix, np.ndarray):
-                    if contig not in contigs:
-                        contigs[contig] = matrix
-                    else:
-                        contigs[contig] += matrix
-                else:
-                    print("Error: unrecognized data type for contig %s: %s" % (contig, matrix.__class__.__name__), file=sys.stderr, flush=True)
-                    sys.exit(1)
-
-                del(matrix)
-    
     print("Finished loading shelves. Creating h5 file: %s" % args.outfile, file=sys.stdout, flush=True)
 
     write_to_h5(contigs, fout)
     finish_time = time.time()
-    total_time = finish_time - start_time
-    print("Finished writing wssd_out_file in %d seconds. Closing." % total_time, file=sys.stdout, flush=True)
+    print("Finished writing wssd_out_file in %d seconds. Closing." % (finish_time - start_time), file=sys.stdout, flush=True)
     fout.close()
