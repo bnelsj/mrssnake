@@ -1,10 +1,7 @@
 from __future__ import print_function
 from __future__ import division
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+import shelve
 
 import time
 import sys
@@ -12,7 +9,7 @@ import argparse
 import glob
 import tables
 import numpy as np
-from scipy.sparse import lil_matrix, csr_matrix
+from scipy.sparse import issparse
 
 def write_to_h5(counts, fout):
     group = fout.create_group(fout.root, "depthAndStarts_wssd")
@@ -62,18 +59,13 @@ if __name__ == "__main__":
     ninfiles = len(infiles)
 
     for i, infile in enumerate(infiles):
-        with open(infile, "rb") as file:
-            sys.stdout.write("Loading pickle %d of %d: %s\n" % (i+1, ninfiles, infile))
-            sys.stdout.flush()
-            dat = pickle.load(file)
+        with shelve.open(infile) as dat:
+            print("Loading shelve %d of %d: %s\n" % (i+1, ninfiles, infile), file=sys.stderr, flush=True)
 
             for contig, matrix in dat.items():
-                if isinstance(matrix, csr_matrix) or isinstance(matrix, lil_matrix):
-                    if contig not in contigs:
-                        contigs[contig] = matrix.toarray()
-                    else:
-                        contigs[contig] += matrix.toarray()
-                elif isinstance(matrix, np.ndarray):
+                if issparse(matrix):
+                    matrix = matrix.toarray()
+                if isinstance(matrix, np.ndarray):
                     if contig not in contigs:
                         contigs[contig] = matrix
                     else:
@@ -84,7 +76,7 @@ if __name__ == "__main__":
 
                 del(matrix)
     
-    print("Finished loading pickles. Creating h5 file: %s" % args.outfile, file=sys.stdout, flush=True)
+    print("Finished loading shelves. Creating h5 file: %s" % args.outfile, file=sys.stdout, flush=True)
 
     write_to_h5(contigs, fout)
     finish_time = time.time()
