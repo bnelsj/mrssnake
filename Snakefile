@@ -23,6 +23,7 @@ MAX_BP = config["max_bp_in_mem"]
 ARRAY_CONTIGS = config["array_contigs"]
 
 AMAZON = config["amazon"]
+BUCKET = config["bucket"]
 TMPDIR = config["tmpdir"]
 LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
@@ -77,7 +78,7 @@ rule clean:
 
             if AMAZON:
                 dirname = os.path.dirname(input.to_remove[0])
-                shell('aws s3 rm s3://{bucket}/{dirname}/ --recursive --exclude wssd_out_file')
+                shell('aws s3 rm s3://{BUCKET}/{dirname}/ --recursive --exclude "*wssd_out_file*"')
 
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
