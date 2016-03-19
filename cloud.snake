@@ -151,12 +151,13 @@ rule check_bam_files:
                 sys.exit(1)
 
 rule download_sample:
-    input: lambda wildcards: [S3.remote(SAMPLES[wildcards.sample]), S3.remote(SAMPLES[wildcards.sample] + ".bai")]
+    input: lambda wildcards: [S3.remote(SAMPLES[wildcards.sample]), S3.remote(SAMPLES[wildcards.sample].replace(".bam", ".bai"))]
     output: temp("bams/{sample}.bam"), temp("bams/{sample}.bam.bai")
     resources: disk=250, cpu=1, mem=1
     priority: 10
     run:
-        shell("cp {output[0]} ./")
+        shell("cp {input[0]} {output[0]}")
+        shell("cp {input[1]} {output[1]}")
 
 
 rule get_headers:
