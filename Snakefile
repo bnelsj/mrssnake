@@ -67,7 +67,7 @@ rule all:
             expand("finished/{sample}", sample = SAMPLES.keys())
 
 rule clean:
-    input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)),
+    input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
             to_keep = "mapping/{sample}/{sample}/wssd_out_file"
     output: touch("finished/{sample}")
     params: sge_opts = "-l h_rt=01:00:00"
@@ -81,7 +81,7 @@ rule clean:
                 shell('aws s3 rm s3://{BUCKET}/{dirname}/ --recursive --exclude "*wssd_out_file*"')
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.pkl" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
     log: "log/merge/{sample}.txt"
@@ -121,7 +121,7 @@ rule merge_sparse_matrices_live:
 
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
-    output: "region_matrices/{sample}/{sample}.{part}_%d.pkl" % BAM_PARTITIONS
+    output: ["region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=10:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
@@ -130,6 +130,7 @@ rule map_and_count:
     shadow: AMAZON
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
+        ofprefix = os.path.commonprefix(output)
         if AMAZON:
             fifo = "mrsfast_fifo"
             rsync_opts = ""
@@ -155,7 +156,7 @@ rule map_and_count:
             "{rsync_opts}"
             "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
+            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
         if AMAZON:
             shell("aws s3 cp {output} s3://{BUCKET}/{output}")

@@ -69,15 +69,16 @@ def load_matrices_per_contig(infiles, contig):
     """
     contig_name = list(contig)[0]
     for i, infile in enumerate(infiles):
-        with shelve.open(infile) as dat:
+        with shelve.open(infile, flag="r") as dat:
             print("Contig %s: loading shelve %d of %d: %s" % (contig_name, i+1, len(infiles), infile), file=sys.stdout, flush=True)
-            
+            matrix = None
             if contig_name in dat:
                 matrix = convert_matrix(dat["contig_name"])
-                if contig[contig_name] is None:
-                    contig[contig_name] = matrix
-                else:
-                    contig[contig_name] += matrix
+        if matrix is not None:
+            if contig[contig_name] is None:
+                contig[contig_name] = matrix
+            else:
+                contig[contig_name] += matrix
     return contig
 
 def write_to_h5(counts, fout):
@@ -142,6 +143,10 @@ if __name__ == "__main__":
 
     if args.infiles is not None:
         infiles.extend(args.infiles)
+
+    # Remove extensions and get unique shelves
+    infiles = map(lambda x: x.replace(".dat", "").replace(".bak", "").replace(".dir", ""), infiles)
+    infiles = list(set(infiles))
 
     if args.per_contig_merge:
         for contig_name in contigs_list:
