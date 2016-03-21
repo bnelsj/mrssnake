@@ -31,7 +31,7 @@ CLEAN_TEMP_FILES = config["clean_temp_files"]
 if LIVE_MERGE:
     ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
 else:
-    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
+    ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
 
 if not AMAZON:
     shell.prefix("source config.sh; ")
