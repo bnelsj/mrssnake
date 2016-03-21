@@ -156,8 +156,10 @@ rule download_sample:
     resources: disk=250, cpu=1, mem=1
     priority: 10
     run:
-        shell("cp {input[0]} {output[0]}")
-        shell("cp {input[1]} {output[1]}")
+        bam = SAMPLES[wildcards.sample]
+        bai = SAMPLES[wildcards.sample].replace(".bam", ".bai")
+        shell("cp {bam} {output[0]}")
+        shell("cp {bai} {output[1]}")
 
 
 rule get_headers:
