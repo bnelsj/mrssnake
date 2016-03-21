@@ -31,7 +31,7 @@ CLEAN_TEMP_FILES = config["clean_temp_files"]
 if LIVE_MERGE:
     ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
 else:
-    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
+    ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
 
 if not AMAZON:
     shell.prefix("source config.sh; ")
@@ -100,7 +100,7 @@ rule merge_sparse_matrices:
             "aws s3 cp {output} s3://{BUCKET}/{output}"
 
 rule merge_sparse_matrices_live:
-    input: bam = lambda wildcards: SAMPLES[wildcards.sample], chunker = "bin/bam_chunker", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES[wildcards.sample], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.txt"
@@ -120,7 +120,7 @@ rule merge_sparse_matrices_live:
             "aws s3 cp {output} s3://{BUCKET}/{output}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
+    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
     output: ["region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=10:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
@@ -154,7 +154,7 @@ rule map_and_count:
             "hostname; "
             "mkfifo {fifo}; "
             "{rsync_opts}"
-            "./bin/bam_chunker -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
+            "./bin/bam_chunker_cascade -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
             "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
@@ -195,8 +195,8 @@ rule check_index:
             sys.exit("Reference %s was not indexed with the current version of mrsfastULTRA. Please reindex." % input[0])
 
 rule make_chunker:
-    input: "src/chunker.cpp", "Makefile"
-    output: "bin/bam_chunker"
+    input: "src/chunker_cascade.cpp", "Makefile"
+    output: "bin/bam_chunker_cascade"
     params: sge_opts = ""
     shell:
         "make"
