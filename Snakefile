@@ -17,6 +17,8 @@ CONTIGS_FILE = config[REFERENCE]["contigs"]
 
 BAM_PARTITIONS = config["bam_partitions"]
 UNMAPPED_PARTITIONS = config["unmapped_partitions"]
+if UNMAPPED_PARTITIONS == -1:
+    UNMAPPED_PARTITIONS = max(BAM_PARTITIONS // 500, 1)
 AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
