@@ -130,7 +130,7 @@ rule map_and_count:
     shadow: AMAZON
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
-        ofprefix = os.path.commonprefix(output)
+        ofprefix = output[0].replace(".dat", "")
         if AMAZON:
             fifo = "mrsfast_fifo"
             rsync_opts = ""
