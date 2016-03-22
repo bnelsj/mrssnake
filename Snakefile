@@ -153,7 +153,7 @@ rule map_and_count:
             read_counter_args = ""
 
         shell("hostname; mkfifo {fifo}; {rsync_opts}")
-        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} >> /dev/stderr | "
+        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
