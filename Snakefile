@@ -6,6 +6,8 @@ import json
 from MappingJob import *
 from subprocess import CalledProcessError
 
+shell.executable("/bin/bash")
+shell.prefix("set -o pipefail; ")
 
 if config == {}:
     configfile: "config.yaml"
