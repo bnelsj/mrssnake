@@ -7,6 +7,8 @@ import time
 import sys
 import argparse
 import glob
+import filelock
+
 import tables
 import numpy as np
 from scipy.sparse import issparse
@@ -85,26 +87,26 @@ def write_to_h5(counts, fout):
     """Write counts (dictionary of contig matrices) to fout hdf5 file.
        Outfile is in wssd_out_file format.   
     """
-    group = fout.create_group(fout.root, "depthAndStarts_wssd")
+    try:
+        group = fout.get_node(fout.root, "depthAndStarts_wssd")
+    except NoSuchNodeError:
+        group = fout.create_group(fout.root, "depthAndStarts_wssd")
+    finally:
+        for i, (contig, matrix) in enumerate(counts.items()):
+            print("Merger: %d Creating array for %s" %(i+1, contig), file=sys.stdout, flush=True)
+            nrows, ncols = matrix.shape
+            nedists = nrows // 2
+            wssd_contig = matrix.T
 
-    for i, (contig, matrix) in enumerate(counts.items()):
-        print("Merger: %d Creating array for %s" %(i+1, contig), file=sys.stdout, flush=True)
-        nrows, ncols = matrix.shape
-        nedists = nrows // 2
-        carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
+            carray_empty = tables.CArray(group, contig, tables.UInt32Atom(), (ncols, nedists, 2), filters=tables.Filters(complevel=1, complib="lzo"))
 
-        wssd_contig = matrix.T
+            # Add depth counts
+            carray_empty[:, :, 0] = wssd_contig[:, nedists:]
 
-        # Add depth counts
-        carray_empty[:, :, 0] = wssd_contig[:, nedists:]
+            # Add starts
+            carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
 
-        # Add starts
-        carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
-
-        fout.flush()
-
-        del(wssd_contig)
-
+            fout.flush()
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -124,8 +126,8 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    fout = tables.open_file(args.outfile, mode="w")
-    print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+    #fout = tables.open_file(args.outfile, mode="w")
+    #print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
 
     contigs = {}
     contig_list = []
@@ -153,15 +155,27 @@ if __name__ == "__main__":
             contig = {}
             contig[contig_name] = None
             contig = load_matrices_per_contig(infiles, contig)
-            write_to_h5(contig, fout)
+            lock = filelock.FileLock(args.outfile)
+            written = False
+            while not written:
+                try:
+                    with lock.acquire(timeout=10):
+                        with tables.open_file(args.outfile, mode="a") as fout:
+                            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+                            write_to_h5(contig, fout)
+                    written = True
+                except filelock.Timeout:
+                    time.sleep(30)
+                    
     else:
         if args.live_merge:
             contigs = load_matrices_live(infiles, contigs)
         else:
             contigs = load_matrices_post(infiles, contigs)
         print("Finished loading shelves. Creating h5 file: %s" % args.outfile, file=sys.stdout, flush=True)
-        write_to_h5(contigs, fout)
+        with tables.open_file(args.outfile, mode="a") as fout:
+            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+            write_to_h5(contigs, fout)
 
     finish_time = time.time()
     print("Finished writing wssd_out_file in %d seconds. Closing." % (finish_time - start_time), file=sys.stdout, flush=True)
-    fout.close()

@@ -7,7 +7,7 @@ from MappingJob import *
 from subprocess import CalledProcessError
 
 shell.executable("/bin/bash")
-shell.prefix("set -o pipefail; ")
+shell.prefix("set -euo pipefail; source config.sh; ")
 
 if config == {}:
     configfile: "config.yaml"
@@ -94,10 +94,10 @@ rule merge_sparse_matrices:
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         if AMAZON:
-            shell('python3 merger.py {output} --infile_glob "{infile_glob}"')
+            shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
         else:
             shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}"')
+            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --per_contig_merge')
             shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
             shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
         if AMAZON:
@@ -126,7 +126,7 @@ rule merge_sparse_matrices_live:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample], lambda wildcards: SAMPLES[wildcards.sample] + ".bai", "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
-    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=10:00:00"
+    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
     resources: mem=4
@@ -154,8 +154,8 @@ rule map_and_count:
         else:
             read_counter_args = ""
 
-        shell("hostname; mkfifo {fifo}; {rsync_opts}")
-        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
+        shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
+        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
