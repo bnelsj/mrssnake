@@ -19,6 +19,8 @@ CONTIGS_FILE = config[REFERENCE]["contigs"]
 
 BAM_PARTITIONS = config["bam_partitions"]
 UNMAPPED_PARTITIONS = config["unmapped_partitions"]
+if UNMAPPED_PARTITIONS == -1:
+    UNMAPPED_PARTITIONS = max(BAM_PARTITIONS // 500, 1)
 AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
@@ -122,8 +124,8 @@ rule merge_sparse_matrices_live:
             "aws s3 cp {output} s3://{BUCKET}/{output}"
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
-    output: ["region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
+    input: lambda wildcards: SAMPLES[wildcards.sample], lambda wildcards: SAMPLES[wildcards.sample] + ".bai", "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
+    output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=10:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
@@ -139,8 +141,8 @@ rule map_and_count:
             mrsfast_ref_path = MASKED_REF
         else:
             fifo = "%s/mrsfast_fifo" % TMPDIR
-            rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch /var/tmp/mrsfast_index/{0}; echo Finished rsync from {0} to /var/tmp/mrsfast_index > /dev/stderr; ".format(MASKED_REF)
-            mrsfast_ref_path = "/var/tmp/%s" % masked_ref_name
+            mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
+            rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch {1}; echo Finished rsync from {0} to {1} > /dev/stderr; ".format(MASKED_REF, mrsfast_ref_path)
 
         if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
             common_contigs = "--common_contigs " + " ".join(ARRAY_CONTIGS)
@@ -152,12 +154,9 @@ rule map_and_count:
         else:
             read_counter_args = ""
 
-        shell(
-            "hostname; "
-            "mkfifo {fifo}; "
-            "{rsync_opts}"
-            "./bin/bam_chunker_cascade -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
-            "mrsfast --search /var/tmp/mrsfast_index/{masked_ref_name} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
+        shell("hostname; mkfifo {fifo}; {rsync_opts}")
+        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} | "
+            "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
             )
         if AMAZON:
