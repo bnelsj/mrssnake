@@ -223,6 +223,11 @@ int get_reads(std::vector<interval> & chunks,
   	BGZF* bam;
   	bam = bgzf_open(bamfile.c_str(), "r");
 
+	if(bam == 0) {
+      std::cerr << "Unable to open bam file." << std::endl;
+      exit(1);
+    }
+
 	int remainder, orphan_parts;
     if(globalOpts.part >= globalOpts.nparts) {
       orphan_parts = globalOpts.orphan_parts;
@@ -370,13 +375,16 @@ void read_index(std::vector<interval> & chunks,
   ptr_myfile = fopen(index_name.c_str(),"rb");
   
   if(!ptr_myfile) {
-    std::cerr << "Unable to open file." << std::endl;
+    std::cerr << "Unable to open index file." << std::endl;
     exit(1);
   }
   
   char magic[4];
   fread(&magic, sizeof(char), 4, ptr_myfile);	
-  
+  if(ferror(ptr_myfile) | feof(ptr_myfile)) {
+     std::cerr << "Error reading index file." << std::endl;
+     exit(1);
+  }
   int32_t n_ref;
   fread(&n_ref,sizeof(int32_t),1,ptr_myfile);
   
