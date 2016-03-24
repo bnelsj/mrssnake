@@ -6,8 +6,10 @@ import json
 from MappingJob import *
 from subprocess import CalledProcessError
 
+SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+
 shell.executable("/bin/bash")
-shell.prefix("source config.sh; set -euo pipefail; ")
+shell.prefix("source %s/config.sh; set -euo pipefail; " % SNAKEMAKE_DIR)
 
 if config == {}:
     configfile: "config.yaml"
