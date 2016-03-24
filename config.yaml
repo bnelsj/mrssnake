@@ -1,6 +1,6 @@
 ---
 reference: hg19
-manifest: manifest.txt
+manifest: manifest.test.txt
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked
@@ -15,19 +15,14 @@ custom_contig:
     masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
-bam_partitions: 1000
+bam_partitions: 250
 # Number of unmapped partitions. If set to -1, use bam_partitions / 500
 unmapped_partitions: -1
 
-array_contigs: 
-
-# If this is set to True, the read counter will automatically assign contigs to numpy or lil arrays and rebalance every 100K reads
-auto_assign: True
+# Maximum bp to store in numpy arrays. The rest will be in scipy sparse lil matrices
 max_bp_in_mem: 300000000
 
 # Set amazon to True if running on an EC2 instance
-amazon: False
-bucket:
 tmpdir: $TMPDIR
 live_merge: False
 clean_temp_files: True

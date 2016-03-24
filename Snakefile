@@ -23,12 +23,8 @@ BAM_PARTITIONS = config["bam_partitions"]
 UNMAPPED_PARTITIONS = config["unmapped_partitions"]
 if UNMAPPED_PARTITIONS == -1:
     UNMAPPED_PARTITIONS = max(BAM_PARTITIONS // 500, 1)
-AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
-ARRAY_CONTIGS = config["array_contigs"]
-
-BUCKET = config["bucket"]
 TMPDIR = config["tmpdir"]
 LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
