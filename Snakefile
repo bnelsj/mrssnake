@@ -7,7 +7,7 @@ from MappingJob import *
 from subprocess import CalledProcessError
 
 shell.executable("/bin/bash")
-shell.prefix("set -euo pipefail; source config.sh; ")
+shell.prefix("source config.sh; set -euo pipefail; ")
 
 if config == {}:
     configfile: "config.yaml"
