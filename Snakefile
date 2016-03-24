@@ -28,7 +28,6 @@ MAX_BP = config["max_bp_in_mem"]
 
 ARRAY_CONTIGS = config["array_contigs"]
 
-AMAZON = config["amazon"]
 BUCKET = config["bucket"]
 TMPDIR = config["tmpdir"]
 LIVE_MERGE = config["live_merge"]
@@ -38,9 +37,6 @@ if LIVE_MERGE:
     ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
 else:
     ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
-
-if not AMAZON:
-    shell.prefix("source config.sh; ")
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -82,10 +78,6 @@ rule clean:
             remove_glob = os.path.commonprefix(input.to_remove) + "*"
             shell("rm {remove_glob}")
 
-            if AMAZON:
-                dirname = os.path.dirname(input.to_remove[0])
-                shell('aws s3 rm s3://{BUCKET}/{dirname}/ --recursive --exclude "*wssd_out_file*"')
-
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
@@ -95,15 +87,10 @@ rule merge_sparse_matrices:
     benchmark: "benchmarks/merger/{sample}.json"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        if AMAZON:
-            shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
-        else:
-            shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --per_contig_merge')
-            shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
-            shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
-        if AMAZON:
-            "aws s3 cp {output} s3://{BUCKET}/{output}"
+        shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
+        shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --per_contig_merge')
+        shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
+        shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES[wildcards.sample], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
@@ -115,15 +102,10 @@ rule merge_sparse_matrices_live:
     priority: 20
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        if AMAZON:
-            shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge')
-        else:
-            shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-            shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --live_merge')
-            shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
-            shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
-        if AMAZON:
-            "aws s3 cp {output} s3://{BUCKET}/{output}"
+        shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
+        shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --live_merge')
+        shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
+        shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample], lambda wildcards: SAMPLES[wildcards.sample] + ".bai", "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
@@ -133,36 +115,20 @@ rule map_and_count:
     priority: 20
     resources: mem=4
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
-    shadow: AMAZON
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
         ofprefix = output[0].replace(".dat", "")
-        if AMAZON:
-            fifo = "mrsfast_fifo"
-            rsync_opts = ""
-            mrsfast_ref_path = MASKED_REF
-        else:
-            fifo = "%s/mrsfast_fifo" % TMPDIR
-            mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
-            rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch {1}; echo Finished rsync from {0} to {1} > /dev/stderr; ".format(MASKED_REF, mrsfast_ref_path)
+        fifo = "%s/mrsfast_fifo" % TMPDIR
+        mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
+        rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index; touch {1}; echo Finished rsync from {0} to {1} > /dev/stderr; ".format(MASKED_REF, mrsfast_ref_path)
 
-        if ARRAY_CONTIGS != [] and ARRAY_CONTIGS is not None:
-            common_contigs = "--common_contigs " + " ".join(ARRAY_CONTIGS)
-        else:
-            common_contigs = ""
-
-        if AUTO_ASSIGN:
-            read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
-        else:
-            read_counter_args = ""
+        read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
 
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
         shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {common_contigs} {read_counter_args}"
+            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
             )
-        if AMAZON:
-            shell("aws s3 cp {output} s3://{BUCKET}/{output}")
 
 rule check_bam_files:
     input: [bam for key, bam in SAMPLES.items()]
