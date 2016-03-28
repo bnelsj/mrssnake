@@ -7,7 +7,6 @@ import time
 import sys
 import argparse
 import glob
-import filelock
 
 import tables
 import numpy as np
@@ -107,15 +106,34 @@ def write_to_h5(counts, fout):
             carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
 
             fout.flush()
-    
+ 
+def write_wssd_to_h5(wssd, fout):
+    """Append single contig wssd_out_file to fout hdf5 file.
+       Outfile is in wssd_out_file format.   
+    """
+    try:
+        group = fout.get_node(fout.root, "depthAndStarts_wssd")
+    except NoSuchNodeError:
+        group = fout.create_group(fout.root, "depthAndStarts_wssd")
+    finally:
+        matrix = wssd.list_nodes("/depthAndStarts_wssd")[0]
+
+        first, second, third = matrix.shape
+
+        carray_empty = tables.CArray(group, matrix.name, tables.UInt32Atom(), (first, second, third), filters=tables.Filters(complevel=1, complib="lzo"))
+        carray_empty = matrix
+
+        fout.flush()
+   
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("outfile", help= "Path to output wssd_out_file")
     parser.add_argument("--infiles", nargs="+", default = None, help = "List of input shelves to merge")
     parser.add_argument("--infile_glob", default = None, help = "glob string for infiles")
     parser.add_argument("--live_merge", default = False, help = "Start merging infiles before they are all finished? (Default: %(default)s)")
-    parser.add_argument("--contigs_file", default = None, help="Tab-delimited table with contig names in the first column")
-    parser.add_argument("--per_contig_merge", action="store_true", help="Merge matrices one contig at a time (low memory footprint)")
+    parser.add_argument("--contigs_file", default = None, help = "Tab-delimited table with contig names in the first column")
+    parser.add_argument("--per_contig_merge", action="store_true", help = "Merge matrices one contig at a time (low memory footprint)")
+    parser.add_argument("--wssd_merge", nargs = "+", default = None, help = "Merge multiple wssd_out_files")
 
     args = parser.parse_args()
 
@@ -147,27 +165,20 @@ if __name__ == "__main__":
         infiles.extend(args.infiles)
 
     # Remove extensions and get unique shelves
-    infiles = map(lambda x: x.replace(".dat", "").replace(".bak", "").replace(".dir", ""), infiles)
-    infiles = list(set(infiles))
+    if infiles != []:
+        infiles = map(lambda x: x.replace(".dat", "").replace(".bak", "").replace(".dir", ""), infiles)
+        infiles = list(set(infiles))
 
     if args.per_contig_merge:
         for contig_name in contigs_list:
             contig = {}
             contig[contig_name] = None
             contig = load_matrices_per_contig(infiles, contig)
-            lock = filelock.FileLock(args.outfile)
-            written = False
-            while not written:
-                try:
-                    with lock.acquire(timeout=10):
-                        with tables.open_file(args.outfile, mode="a") as fout:
-                            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
-                            write_to_h5(contig, fout)
-                    written = True
-                except filelock.Timeout:
-                    time.sleep(30)
+            with tables.open_file(args.outfile, mode="a") as fout:
+                print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+                write_to_h5(contig, fout)
                     
-    else:
+    elif args.wssd_merge is None:
         if args.live_merge:
             contigs = load_matrices_live(infiles, contigs)
         else:
@@ -176,6 +187,15 @@ if __name__ == "__main__":
         with tables.open_file(args.outfile, mode="a") as fout:
             print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
             write_to_h5(contigs, fout)
+
+    else:
+        # Merge wssd files into single wssd_out_file
+        with tables.open_file(args.outfile, mode="a") as fout:
+            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+            for wssd_file in args.wssd_merge:
+                print("Reading wssd_file: %s" % wssd_file, file=sys.stdout, flush=True)
+                with tables.open_file(wssd_file, mode="r") as wssd:
+                    write_wssd_to_h5(wssd, fout)
 
     finish_time = time.time()
     print("Finished writing wssd_out_file in %d seconds. Closing." % (finish_time - start_time), file=sys.stdout, flush=True)
