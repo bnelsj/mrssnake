@@ -77,7 +77,7 @@ rule clean:
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=40
     benchmark: "benchmarks/merger/{sample}.json"
@@ -106,7 +106,7 @@ rule merge_sparse_matrices_live:
 rule map_and_count:
     input: lambda wildcards: SAMPLES[wildcards.sample], lambda wildcards: SAMPLES[wildcards.sample] + ".bai", "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
-    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=5:00:00"
+    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=2:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
     priority: 20
     resources: mem=4
