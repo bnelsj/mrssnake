@@ -70,13 +70,14 @@ struct interval
 
 struct options{
    std::string file;
+   std::string bam_index;
    int part;
    int nparts;
    int chunk_size;
    int orphan_parts;
 }globalOpts;
 
-static const char *optString = "b:p:n:c:u:";
+static const char *optString = "b:i:p:n:c:u:";
 
 //-------------------------------   OPTIONS   --------------------------------
 int parseOpts(int argc, char** argv)
@@ -85,6 +86,7 @@ int parseOpts(int argc, char** argv)
   globalOpts.file = "NA";
   globalOpts.chunk_size = 36;
   globalOpts.orphan_parts = 0;
+  globalOpts.bam_index = "";
   opt = getopt(argc, argv, optString);
   while(opt != -1){
     switch(opt){
@@ -93,6 +95,9 @@ int parseOpts(int argc, char** argv)
     case 'b':
 	  globalOpts.file = optarg;
 	  break;
+    case 'i':
+      globalOpts.bam_index = optarg;
+      break;
     case 'p':
 	  globalOpts.part = atoi(optarg);
 	  break;
@@ -366,13 +371,10 @@ int get_reads(std::vector<interval> & chunks,
 void read_index(std::vector<interval> & chunks, 
 		std::string & fn) {
  
-  const char * file_name = fn.c_str();
-  std::string index_name = fn + ".bai";
   long chunk_counter=0;
   FILE *ptr_myfile;
-  //std::vector <struct interval> chunks;
   
-  ptr_myfile = fopen(index_name.c_str(),"rb");
+  ptr_myfile = fopen(fn.c_str(), "rb");
   
   if(!ptr_myfile) {
     std::cerr << "Unable to open index file." << std::endl;
@@ -454,7 +456,15 @@ int main( int argc, char** argv)
  
   std::vector<interval> chunks, chunks_to_read;
 
-  read_index(chunks, globalOpts.file);
+  std::string index;
+
+  if(globalOpts.bam_index != "") {
+    index = globalOpts.bam_index;
+  } else {
+    index = globalOpts.file + ".bai";
+  }
+
+  read_index(chunks, index);
   
   get_chunk_list(chunks, chunks_to_read, globalOpts.part, globalOpts.nparts);
   
