@@ -1,6 +1,6 @@
 ---
 reference: hg19
-manifest: manifest.test.txt
+manifest: manifest.txt
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked
