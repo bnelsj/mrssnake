@@ -104,7 +104,7 @@ rule merge_sparse_matrices_live:
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge')
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], "bin/bam_chunker_cascade", "readable/{sample}.txt", "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [S3.remote("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, "bak"))
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
@@ -121,7 +121,7 @@ rule map_and_count:
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
 
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; ")
-        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
+        shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
             )

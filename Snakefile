@@ -6,6 +6,8 @@ import json
 from MappingJob import *
 from subprocess import CalledProcessError
 
+import pandas as pd
+
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
 
 shell.executable("/bin/bash")
@@ -44,12 +46,7 @@ with open(CONTIGS_FILE, "r") as reader:
         contig, size = line.rstrip().split()
         CONTIGS[contig] = int(size)
 
-SAMPLES = {}
-
-with open(MANIFEST, "r") as reader:
-    for line in reader:
-        sn, bam = line.rstrip().split()
-        SAMPLES[sn] = bam
+SAMPLES = pd.read_table(MANIFEST)
 
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d.pkl" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
@@ -61,8 +58,8 @@ def get_multiple_contigs(sample, chr, num):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.keys()),
-            expand("finished/{sample}", sample = SAMPLES.keys())
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn),
+            expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule clean:
     input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
@@ -89,7 +86,7 @@ rule merge_sparse_matrices:
         shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule merge_sparse_matrices_live:
-    input: bam = lambda wildcards: SAMPLES[wildcards.sample], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.txt"
@@ -104,7 +101,7 @@ rule merge_sparse_matrices_live:
         shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
 
 rule map_and_count:
-    input: lambda wildcards: SAMPLES[wildcards.sample], lambda wildcards: SAMPLES[wildcards.sample] + ".bai", "bin/bam_chunker_cascade", "BAMS_READABLE", "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=2:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
@@ -122,13 +119,13 @@ rule map_and_count:
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
 
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
-        shell("{input[2]} -b {input[0]} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
+        shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
             )
 
 rule check_bam_files:
-    input: [bam for key, bam in SAMPLES.items()]
+    input: [bam for bam in SAMPLES.bam]
     output: touch("BAMS_READABLE")
     params: sge_opts = ""
     priority: 50
@@ -141,10 +138,10 @@ rule check_bam_files:
                 sys.exit(1)
 
 rule get_headers:
-    input: expand("bam_headers/{sample}.txt", sample = SAMPLES.keys())
+    input: expand("bam_headers/{sample}.txt", sample = SAMPLES.sn)
 
 rule get_header:
-    input: lambda wildcards: SAMPLES[wildcards.sample]
+    input: lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
     output: "bam_headers/{sample}.txt"
     params: sge_opts = ""
     shell:
