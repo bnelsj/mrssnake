@@ -14,7 +14,6 @@ import numpy as np
 from scipy.sparse import lil_matrix, bsr_matrix
 from functools import total_ordering
 import time
-import gc
 
 @total_ordering
 class Contig:
@@ -205,8 +204,6 @@ def count_reads(samfile, contig_manager, args):
                         if not isinstance(array, np.ndarray):
                             read_dict[contig] = array.toarray()
                             del(array)
-                collected = gc.collect()
-                print("Counter GC: collected %d objects." % collected, file=logfile)
                 finish_time = time.time()
                 total_time = finish_time - start_time
                 print("Counter: rebalancing finished in %d sec..." % total_time, file=logfile, flush=True)
