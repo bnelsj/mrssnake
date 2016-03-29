@@ -112,14 +112,20 @@ rule map_and_count:
         masked_ref_name = os.path.basename(MASKED_REF)
         ofprefix = output[0].replace(".dat", "")
         fifo = "%s/mrsfast_fifo" % TMPDIR
-        local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index))
+        if TMPDIR != "":
+            local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index[0]))
+        else:
+            local_index = input.index[0]
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
-        rsync_opts = "rsync {0}.index /var/tmp/mrsfast_index --bwlimit 10000; rsync {2} {3} --bwlimit 10000; touch {1}; echo Finished rsync from {0} to {1} > /dev/stderr; ".format(MASKED_REF, mrsfast_ref_path, input.index, local_index)
+        rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index --bwlimit 10000 --copy-links;
+                        rsync {2} {3} --bwlimit 10000 --copy-links; 
+                        touch {1}; 
+                        echo Finished rsync from {0} to {1} >> /dev/stderr; 
+                        echo Finished rsync from {2} to {3} >> /dev/stderr; """.format(MASKED_REF, mrsfast_ref_path, input.index[0], local_index)
 
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
-
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
-        shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
+        shell("{input.chunker} -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
             )
