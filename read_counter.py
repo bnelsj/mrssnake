@@ -8,12 +8,12 @@ import shelve
 import sys
 import argparse
 
-import pysam
 import numpy as np
 
 from scipy.sparse import lil_matrix, bsr_matrix
 from functools import total_ordering
 import time
+import pysam
 
 @total_ordering
 class Contig:
@@ -29,7 +29,7 @@ class Contig:
         return self.reads / self.size < other.reads / other.size
 
 class ContigManager:
-    def __init__(self, max_bases, contigs_seen = {}, array_contigs = []):
+    def __init__(self, max_bases, contigs_seen={}, array_contigs=[]):
         self.max_bases = max_bases
         self.contigs_seen = contigs_seen
         self.array_contigs = array_contigs
@@ -40,11 +40,12 @@ class ContigManager:
             contig = Contig(contig, size)
         if contig.name not in self.contigs_seen.keys():
             self.contigs_seen[contig.name] = contig
-        if self.used_bases + contig.size <= self.max_bases and contig.name not in self.array_contigs:
+        if self.used_bases + contig.size <= self.max_bases and \
+        contig.name not in self.array_contigs:
             self.array_contigs.append(contig.name)
             self.used_bases += contig.size
 
-    def add_contig_to_array_contigs(self, contig, size = None):
+    def add_contig_to_array_contigs(self, contig, size=None):
         if size is not None:
             contig = Contig(contig, size)
         self.add_contig(contig)
@@ -81,7 +82,7 @@ def get_array_contigs(contigs, args):
         if args.common_contigs is not None:
             array_contigs.extend(args.common_contigs)
         if args.noncanonical_contigs:
-            canonical = ["chr%s" % str(x) for x in list(range(1,25)) + ["X", "Y", "M"]]
+            canonical = ["chr%s" % str(x) for x in list(range(1, 25)) + ["X", "Y", "M"]]
             array_contigs.extend([contig for contig in contigs.keys() if contig not in canonical])
     return array_contigs
 
@@ -138,7 +139,7 @@ def update_read_depth_and_start(matrix, edist, start, end, nedists=3):
 #                slice = read_dict[contig][edist + nstart_rows, start:end].toarray()
 #                slice += 1
 #                read_dict[contig][edist + nstart_rows, start:end] = slice
-#     
+#
 #            # Update read start counts
 #            read_dict[contig][edist, start] += 1
 #
@@ -167,7 +168,11 @@ def count_reads(samfile, contig_manager, args):
             length = contig_manager.contigs_seen[contig].size
             if contig in contig_manager.array_contigs:
                 read_dict[contig] = np.zeros((nrows, length), dtype=np.uint16)
-                print("Counter: %s (%d, %d) numpy array" % (contig, nrows, length), file=logfile, flush=True)
+                print("Counter: %s (%d, %d) numpy array" %
+                      (contig, nrows, length),
+                      file=logfile,
+                      flush=True
+                     )
             else:
                 read_dict[contig] = lil_matrix((nrows, length), dtype=np.uint16)
                 print("Counter: %s scipy lil_matrix" % contig, file=logfile, flush=True)
@@ -193,8 +198,15 @@ def count_reads(samfile, contig_manager, args):
                 start_time = time.time()
                 old_contigs = contig_manager.array_contigs
                 contig_manager.rebalance()
-                print("Contigs removed:", " ".join([contig for contig in old_contigs if contig not in contig_manager.array_contigs]), sep = " ", file=logfile)
-                print("Contigs added:  ", " ".join([contig for contig in contig_manager.array_contigs if contig not in old_contigs]), sep = " ", file=logfile, flush=True)
+                print("Contigs removed:", " ".join(
+                      [contig for contig in old_contigs 
+                      if contig not in contig_manager.array_contigs]
+                      ),
+                      sep = " ",
+                      file=logfile
+                     )
+                print("Contigs added:  ", " ".join(
+                      [contig for contig in contig_manager.array_contigs if contig not in old_contigs]), sep = " ", file=logfile, flush=True)
                 for contig, array in read_dict.items():
                     if contig not in contig_manager.array_contigs:
                         if not isinstance(array, lil_matrix):
@@ -284,7 +296,7 @@ if __name__ == "__main__":
 
     print("Counter: finished converting numpy arrays and lil matrices to bsr_matrix", file=logfile, flush=True)
 
-    with shelve.open(args.outfile, protocol = HIGHEST_PROTOCOL) as outfile:
+    with shelve.open(args.outfile, protocol=HIGHEST_PROTOCOL) as outfile:
         outfile.update(read_dict)
 
     run_end = time.time()
