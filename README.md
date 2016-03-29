@@ -34,7 +34,7 @@ Simple mrsfast read depth mapping using snakemake
 4. Run snakemake
 
    This example will use 100 cores and the `--cluster-sync` option:
-   ```python
+   ```bash
    snakemake -T --cluster-sync "qsub -sync y {params.sge_opts}" -w 30 -j 100
    ```
 
