@@ -4,7 +4,7 @@ manifest: manifest.txt
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked
-    contigs: /home/ec2-user/reference/hg19_masked.contigs.txt
+    contigs: /home/ec2-user/reference/hg19_masked.fai
 hg19:
     masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked
     contigs: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked.fai
