@@ -65,7 +65,7 @@ rule map_sample:
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     shell:
-        "snakemake -s cloud.mapper.snake -j 40 --resources mem=155"
+        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 36 --resources mem=155 -w 30"
 
 rule check_index:
     input: MASKED_REF
