@@ -13,7 +13,7 @@ Simple mrsfast read depth mapping using snakemake
    | --- | ------ | --- | ----- |
    | sample_name  |  local | /full/path/to/bam | /full/path/to/bam/index |
 
-3. Modify `config.yaml`. 
+3. Modify `config.yaml`
 
    In particular, set the manifest variable to point to your manifest file, 
    make sure the `reference` variable points to the appropriate reference, 
