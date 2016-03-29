@@ -31,7 +31,9 @@ Simple mrsfast read depth mapping using snakemake
    ```
    Note that every `masked_ref` must be indexed with mrsfastULTRA.
 4. Run snakemake
+5. 
    This example will use 100 cores and the `--cluster-sync` option:
+
    ```python
    snakemake -T --cluster-sync "qsub -sync y {params.sge_opts}" -w 30 -j 100
    ```
