@@ -34,8 +34,10 @@ CLEAN_TEMP_FILES = config["clean_temp_files"]
 
 if LIVE_MERGE:
     ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
+    ruleorder: merge_wssd > merge_sparse_matrices
 else:
     ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
+    ruleorder: merge_sparse_matrices > merge_wssd
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -68,7 +70,7 @@ rule all:
             expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule clean:
-    input:  to_remove = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
+    input:  to_remove = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"])), 
             to_keep = S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     output: touch("finished/{sample}")
     params: sge_opts = "-l h_rt=01:00:00"
