@@ -65,6 +65,32 @@ def load_matrices_post(infiles, contigs):
             contigs = add_contents_to_contigs(dat, contigs)
     return contigs
 
+def load_matrices_per_contig_live(infiles, contig):
+    """Get counts from all infiles for a given contig dictionary as they are finished.
+    """
+    contig_name = list(contig)[0]
+    infiles = set(infiles)
+    total_infiles = len(infiles)
+    processed_infiles = set()
+    while len(infiles) > 0:
+        for infile in infiles:
+            # Check if infile exists and hasn't been modified in 5 minutes
+            if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
+                try:
+                    dat = shelve.open(infile, flag="r")
+                except error as e:
+                    print("Error: %s: %s" % (infile, str(e)), file=sys.stderr, flush=True)
+                    continue
+                else:
+                    if contig_name in dat:
+                        contigs = add_contents_to_contigs(dat, contigs)
+                    dat.close()
+                    processed_infiles.add(infile)
+                    print("Loaded shelve %d of %d: %s" % (len(processed_infiles), total_infiles, infile), file=sys.stdout, flush=True)
+        infiles -= processed_infiles
+        time.sleep(30)
+    return contigs
+
 def load_matrices_per_contig(infiles, contig):
     """Get counts from all infiles for a given contig dictionary.
     """
@@ -132,14 +158,15 @@ if __name__ == "__main__":
     parser.add_argument("--infile_glob", default = None, help = "glob string for infiles")
     parser.add_argument("--live_merge", default = False, help = "Start merging infiles before they are all finished? (Default: %(default)s)")
     parser.add_argument("--contigs_file", default = None, help = "Tab-delimited table with contig names in the first column")
+    parser.add_argument("--contig", default = None, help = "Name of contig to merge")
     parser.add_argument("--per_contig_merge", action="store_true", help = "Merge matrices one contig at a time (low memory footprint)")
     parser.add_argument("--wssd_merge", nargs = "+", default = None, help = "Merge multiple wssd_out_files")
 
     args = parser.parse_args()
 
     if args.per_contig_merge:
-        if args.contigs_file is None:
-            print("Must specify --contigs file for per_contig_merge", file = sys.stderr)
+        if args.contigs_file is None and args.contig is None:
+            print("Must specify --contigs_file or --contig for per_contig_merge", file = sys.stderr)
             sys.exit(1)
 
     start_time = time.time()
@@ -151,10 +178,13 @@ if __name__ == "__main__":
     contig_list = []
 
     if args.per_contig_merge:
-        with open(args.contigs_file, "r") as contigs_file:
-            for line in contigs_file:
-                contig = line.rstrip().split()[0]
-                contigs_list.append(contig)
+        if args.contig is not None:
+            contig_list.append(args.contig)
+        if args.contig_file is not None:
+            with open(args.contigs_file, "r") as contigs_file:
+                for line in contigs_file:
+                    contig = line.rstrip().split()[0]
+                    contigs_list.append(contig)
 
     infiles = []
 

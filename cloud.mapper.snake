@@ -80,7 +80,7 @@ rule clean:
 rule merge_sparse_matrices:
     input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
-    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=8
     benchmark: "benchmarks/merger/{sample}.txt"
@@ -88,17 +88,27 @@ rule merge_sparse_matrices:
         infile_glob = os.path.commonprefix(input) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
 
+rule merge_wssd:
+    input: S3.remote(expand("%s/mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}" % BUCKET, contig = CONTIGS))
+    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
+    resources: mem=8
+    benchmark: "benchmarks/wssd_merge/{sample}.txt"
+    priority: 30
+    run:
+        shell('python3 merger.py {output} --wssd_merge {input}')
+
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]), chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
-    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
-    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
+    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET)
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=8
-    benchmark: "benchmarks/merger/{sample}.txt"
+    benchmark: "benchmarks/merger/{sample}.{contig}.txt"
     priority: 10
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge')
+        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig}')
 
 rule map_and_count:
     input: bam = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]), index = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]), chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
