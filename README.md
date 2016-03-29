@@ -29,11 +29,11 @@ Simple mrsfast read depth mapping using snakemake
        masked_ref: /path/to/masked_ref
        contigs: /path/to/contigs
    ```
-   Note that every `masked_ref` must be indexed with mrsfastULTRA.
+   Note that every `masked_ref` must be TRF and repeat-masked and indexed with mrsfastULTRA.
+   
 4. Run snakemake
-5. 
-   This example will use 100 cores and the `--cluster-sync` option:
 
+   This example will use 100 cores and the `--cluster-sync` option:
    ```python
    snakemake -T --cluster-sync "qsub -sync y {params.sge_opts}" -w 30 -j 100
    ```
