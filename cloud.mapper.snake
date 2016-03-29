@@ -1,8 +1,6 @@
 import os
 import sys
 import pysam
-import hashlib
-import json
 from subprocess import CalledProcessError
 
 import pandas as pd
@@ -27,7 +25,6 @@ BAM_PARTITIONS = config["bam_partitions"]
 UNMAPPED_PARTITIONS = config["unmapped_partitions"]
 if UNMAPPED_PARTITIONS == -1:
     UNMAPPED_PARTITIONS = max(BAM_PARTITIONS // 500, 1)
-AUTO_ASSIGN = config["auto_assign"]
 MAX_BP = config["max_bp_in_mem"]
 
 BUCKET = config["bucket"]
@@ -67,12 +64,12 @@ def get_multiple_contigs(sample, chr, num):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn),
+    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)),
             expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule clean:
-    input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
-            to_keep = "mapping/{sample}/{sample}/wssd_out_file"
+    input:  to_remove = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
+            to_keep = S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     output: touch("finished/{sample}")
     params: sge_opts = "-l h_rt=01:00:00"
     run:
@@ -81,31 +78,31 @@ rule clean:
             shell("rm {remove_glob}")
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=8
-    benchmark: "benchmarks/merger/{sample}.json"
+    benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
 
 rule merge_sparse_matrices_live:
-    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]), chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=8
-    benchmark: "benchmarks/merger/{sample}.json"
+    benchmark: "benchmarks/merger/{sample}.txt"
     priority: 10
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge')
 
 rule map_and_count:
-    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
-    output: [S3.remote("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, "bak"))
+    input: bam = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]), index = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]), chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
+    output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s") % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, "bak"))
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
@@ -127,7 +124,7 @@ rule map_and_count:
             )
 
 rule check_bam_files:
-    input: lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
+    input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"])
     output: touch("readable/{sample}.txt")
     params: sge_opts = ""
     priority: 50
@@ -136,5 +133,5 @@ rule check_bam_files:
             try:
                 test = pysam.AlignmentFile(bamfile)
             except ValueError as e:
-                print("Error: could not open %s as bam.\n%s\n" % (bamfile, str(e)), file = sys.stderr)
+                print("Error: could not open %s as bam.\n%s" % (bamfile, str(e)), file = sys.stderr)
                 sys.exit(1)
