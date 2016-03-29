@@ -24,5 +24,5 @@ max_bp_in_mem: 300000000
 # S3 bucket 
 bucket: simonsphase3
 tmpdir:
-live_merge: False
+live_merge: True
 clean_temp_files: False

@@ -17,7 +17,7 @@ from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
 S3 = S3RemoteProvider(access_key_id=os.environ["AWS_ACCESS_KEY_ID"], secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
 
 shell.executable("/bin/bash")
-shell.prefix("set -euo pipefail; " % SNAKEMAKE_DIR)
+shell.prefix("set -euo pipefail; ")
 
 if config == {}:
     configfile: "cloud.config.yaml"
@@ -38,9 +38,6 @@ LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
 
 BUCKET = config["bucket"]
-
-if not AMAZON:
-    shell.prefix("source config.sh; ")
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -68,7 +65,7 @@ rule map_sample:
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     shell:
-        "snakemake -s cloud.mapper.snake -j 40"
+        "snakemake -s cloud.mapper.snake -j 40 --resources mem=155"
 
 rule check_index:
     input: MASKED_REF
