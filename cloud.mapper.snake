@@ -113,7 +113,7 @@ rule merge_sparse_matrices_live:
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig}')
 
 rule map_and_count:
-    input: bam = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]), index = lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]), chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s") % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, "bak"))
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
