@@ -3,10 +3,8 @@ log/
 .snakemake/
 benchmarks/
 __pycache__/
-MappingJob.pyc
 *.pkl
 *.sam
 *.fa
 *.fasta
-*.txt
 __test*
