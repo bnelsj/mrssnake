@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("--infiles", nargs="+", default=None, help="List of input shelves to merge")
     parser.add_argument("--infile_glob", default=None, help="glob string for infiles")
     parser.add_argument("--live_merge",
-                        default=False,
+                        action="store_true",
                         help="Start merging infiles before they are all finished? \
                               (Default: %(default)s)"
                        )
