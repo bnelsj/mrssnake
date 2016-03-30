@@ -191,7 +191,7 @@ def update_read_depth_and_start(matrix, edist, start, end, nedists=3):
 #
 #    return read_dict
 
-def rebalance_contigs(contig_manager):
+def rebalance_contigs(contig_manager, read_dict):
     """
     Reassign contigs to numpy or sparse matrices based on recent read depth
     """
@@ -275,7 +275,7 @@ def count_reads(samfile, contig_manager, args):
 
         if i % args.rebalance_freq == 0 and i > 0:
             print("Counter: %d reads processed" % i, file=logfile, flush=True)
-            rebalance_contigs(contig_manager)
+            rebalance_contigs(contig_manager, read_dict)
            
     return read_dict
 
