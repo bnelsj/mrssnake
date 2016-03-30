@@ -58,14 +58,27 @@ rule all:
             expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule map_sample:
-    input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]),
-           lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]),
-           "MRSFASTULTRA_INDEXED"
+    input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET), "finished/{sample}"
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     shell:
         "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 36 --resources mem=155 -w 30"
+
+rule download_sample:
+    input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]),
+           lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]),
+           "MRSFASTULTRA_INDEXED"
+    output: temp("bam/{sample}.bam"),
+            temp("bam/{sample}.bai")
+    run:
+        bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
+        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bai"]
+        shell("mv {bam} {output[0]}")
+        shell("mv {bai} {output[1]}")
+        shell("touch {bam}")
+        shell("touch {bai}")
+    
 
 rule check_index:
     input: MASKED_REF
