@@ -169,7 +169,11 @@ def write_wssd_to_h5(wssd, fout):
     except NoSuchNodeError:
         group = fout.create_group(fout.root, "depthAndStarts_wssd")
     finally:
-        matrix = wssd.list_nodes("/depthAndStarts_wssd")[0]
+        nodes = wssd.list_nodes("/depthAndStarts_wssd/")
+        if len(nodes) > 0:
+            matrix = nodes[0]
+        else:
+            return
         first, second, third = matrix.shape
 
         carray_empty = tables.CArray(group,
