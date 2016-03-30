@@ -136,7 +136,7 @@ rule map_and_count:
             )
 
 rule check_bam_files:
-    input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"])
+    input: lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
     output: touch("readable/{sample}.txt")
     params: sge_opts = ""
     priority: 50
