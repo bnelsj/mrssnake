@@ -171,41 +171,36 @@ def write_wssd_to_h5(wssd_handle, fout_handle):
     finally:
         nodes = wssd_handle.list_nodes("/depthAndStarts_wssd/")
         if len(nodes) > 0:
-            matrix = nodes[0]
-            first, second, third = matrix.shape
+            for matrix in nodes:
+                first, second, third = matrix.shape
 
-            carray_empty = tables.CArray(group,
-                                         matrix.name,
-                                         tables.UInt32Atom(),
-                                         (first, second, third),
-                                         filters=tables.Filters(complevel=1, complib="lzo")
-                                        )
-            carray_empty = matrix
-            fout_handle.flush()
+                carray_empty = tables.CArray(group,
+                                             matrix.name,
+                                             tables.UInt32Atom(),
+                                             (first, second, third),
+                                             filters=tables.Filters(complevel=1, complib="lzo")
+                                            )
+                carray_empty = matrix
+                fout_handle.flush()
+
+        else:
+            print("Empty wssd file", file=sys.stderr)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("outfile", help="Path to output wssd_out_file")
     parser.add_argument("--infiles", nargs="+", default=None, help="List of input shelves to merge")
     parser.add_argument("--infile_glob", default=None, help="glob string for infiles")
-    parser.add_argument("--live_merge",
-                        action="store_true",
+    parser.add_argument("--live_merge", action="store_true",
                         help="Start merging infiles before they are all finished? \
-                              (Default: %(default)s)"
-                       )
-    parser.add_argument("--contigs_file",
-                        default=None,
+                              (Default: %(default)s)")
+    parser.add_argument("--contigs_file", default=None,
                         help="Tab-delimited table with contig names in the first column")
     parser.add_argument("--contig", default=None, help="Name of contig to merge")
-    parser.add_argument("--per_contig_merge",
-                        action="store_true",
-                        help="Merge matrices one contig at a time (low memory footprint)"
-                       )
-    parser.add_argument("--wssd_merge",
-                        nargs="+",
-                        default=None,
-                        help="Merge multiple wssd_out_files"
-                       )
+    parser.add_argument("--per_contig_merge", action="store_true",
+                        help="Merge matrices one contig at a time (low memory footprint)")
+    parser.add_argument("--wssd_merge", nargs="+", default=None,
+                        help="Merge multiple wssd_out_files")
 
     args = parser.parse_args()
 
