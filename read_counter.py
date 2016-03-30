@@ -52,7 +52,10 @@ class ContigManager:
             self.contigs_seen = contigs_seen
         else:
             self.contigs_seen = {}
-        self.array_contigs = array_contigs
+        if array_contigs is not None:
+            self.array_contigs = array_contigs
+        else:
+            self.array_contigs = []
         self.used_bases = sum([contigs_seen[contig].size for contig in self.array_contigs])
 
     def add_contig(self, contig, contig_size=None):
