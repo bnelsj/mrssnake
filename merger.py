@@ -47,9 +47,9 @@ def add_contents_to_contigs(dat, contigs):
             contigs[contig] += matrix
     return contigs
 
-def load_matrices_live(infiles, contigs):
-    """Load infiles to contigs dictionary as they are finished."""
-    fileset = set(infiles)
+def load_matrices_live(matrices, contigs):
+    """Load matrices to contigs dictionary as they are finished."""
+    fileset = set(matrices)
     total_infiles = len(fileset)
     processed_infiles = set()
     while len(fileset) > 0:
@@ -72,22 +72,22 @@ def load_matrices_live(infiles, contigs):
         time.sleep(30)
     return contigs
 
-def load_matrices_post(infiles, contigs):
-    """Load infiles to contigs dictionary. Assumes all infiles are complete."""
-    for i, infile in enumerate(infiles):
+def load_matrices_post(matrices, contigs):
+    """Load matrices to contigs dictionary. Assumes all matrices exist."""
+    for i, infile in enumerate(matrices):
         with shelve.open(infile) as dat:
             print("Loading shelve %d of %d: %s" %
-                  (i+1, len(infiles), infile),
+                  (i+1, len(matrices), infile),
                   file=sys.stdout, flush=True)
 
             contigs = add_contents_to_contigs(dat, contigs)
     return contigs
 
-def load_matrices_per_contig_live(infiles, contig):
-    """Get counts from all infiles for a given contig dictionary as they are finished.
+def load_matrices_per_contig_live(matrices, contig):
+    """Get counts from all matrices for a given contig dictionary as they are finished.
     """
-    contig_name = list(contig)[0]
-    fileset = set(infiles)
+    contig_string = list(contig)[0]
+    fileset = set(matrices)
     total_infiles = len(fileset)
     processed_infiles = set()
     while len(fileset) > 0:
@@ -100,7 +100,7 @@ def load_matrices_per_contig_live(infiles, contig):
                     print("Error: %s: %s" % (infile, str(err)), file=sys.stderr, flush=True)
                     continue
                 else:
-                    if contig_name in dat:
+                    if contig_string in dat:
                         contig = add_contents_to_contigs(dat, contig)
                     dat.close()
                     processed_infiles.add(infile)
@@ -111,33 +111,33 @@ def load_matrices_per_contig_live(infiles, contig):
         time.sleep(30)
     return contig
 
-def load_matrices_per_contig(infiles, contig):
-    """Get counts from all infiles for a given contig dictionary.
+def load_matrices_per_contig(matrices, contig):
+    """Get counts from all matrices for a given contig dictionary.
     """
-    contig_name = list(contig)[0]
-    for i, infile in enumerate(infiles):
+    contig_string = list(contig)[0]
+    for i, infile in enumerate(matrices):
         with shelve.open(infile, flag="r") as dat:
             print("Contig %s: loading shelve %d of %d: %s" %
-                  (contig_name, i+1, len(infiles), infile),
+                  (contig_string, i+1, len(matrices), infile),
                   file=sys.stdout, flush=True)
             matrix = None
-            if contig_name in dat:
-                matrix = convert_matrix(dat["contig_name"])
+            if contig_string in dat:
+                matrix = convert_matrix(dat[contig_string])
         if matrix is not None:
-            if contig[contig_name] is None:
-                contig[contig_name] = matrix
+            if contig[contig_string] is None:
+                contig[contig_string] = matrix
             else:
-                contig[contig_name] += matrix
+                contig[contig_string] += matrix
     return contig
 
-def write_to_h5(counts, fout):
+def write_to_h5(counts, fout_handle):
     """Write counts (dictionary of contig matrices) to fout hdf5 file.
        Outfile is in wssd_out_file format.
     """
     try:
-        group = fout.get_node(fout.root, "depthAndStarts_wssd")
+        group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
     except NoSuchNodeError:
-        group = fout.create_group(fout.root, "depthAndStarts_wssd")
+        group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
     finally:
         for i, (contig, matrix) in enumerate(counts.items()):
             print("Merger: %d Creating array for %s" %(i+1, contig), file=sys.stdout, flush=True)
@@ -158,32 +158,30 @@ def write_to_h5(counts, fout):
             # Add starts
             carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
 
-            fout.flush()
+            fout_handle.flush()
 
-def write_wssd_to_h5(wssd, fout):
+def write_wssd_to_h5(wssd_handle, fout_handle):
     """Append single contig wssd_out_file to fout hdf5 file.
        Outfile is in wssd_out_file format.
     """
     try:
-        group = fout.get_node(fout.root, "depthAndStarts_wssd")
+        group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
     except NoSuchNodeError:
-        group = fout.create_group(fout.root, "depthAndStarts_wssd")
+        group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
     finally:
-        nodes = wssd.list_nodes("/depthAndStarts_wssd/")
+        nodes = wssd_handle.list_nodes("/depthAndStarts_wssd/")
         if len(nodes) > 0:
             matrix = nodes[0]
-        else:
-            return
-        first, second, third = matrix.shape
+            first, second, third = matrix.shape
 
-        carray_empty = tables.CArray(group,
-                                     matrix.name,
-                                     tables.UInt32Atom(),
-                                     (first, second, third),
-                                     filters=tables.Filters(complevel=1, complib="lzo")
-                                    )
-        carray_empty = matrix
-        fout.flush()
+            carray_empty = tables.CArray(group,
+                                         matrix.name,
+                                         tables.UInt32Atom(),
+                                         (first, second, third),
+                                         filters=tables.Filters(complevel=1, complib="lzo")
+                                        )
+            carray_empty = matrix
+            fout_handle.flush()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
