@@ -201,26 +201,23 @@ def rebalance_contigs(contig_manager, read_dict):
         start_time = time.time()
         old_contigs = contig_manager.array_contigs
         contig_manager.rebalance()
-        print("Contigs removed:", " ".join(
-            [contig for contig in old_contigs
-             if contig not in contig_manager.array_contigs]
-            ),
-              sep=" ",
-              file=logfile
-             )
-        print("Contigs added:  ", " ".join(
-            [contig for contig in contig_manager.array_contigs
-             if contig not in old_contigs]), sep=" ", file=logfile, flush=True
-             )
-        for contig, array in read_dict.items():
-            if contig not in contig_manager.array_contigs:
-                if not isinstance(array, lil_matrix):
-                    read_dict[contig] = lil_matrix(array)
-                    del array
-            else:
-                if not isinstance(array, np.ndarray):
-                    read_dict[contig] = array.toarray()
-                    del array
+        contigs_removed = [contig for contig in old_contigs if contig not in contig_manager.array_contigs]
+        contigs_added = [contig for contig in contig_manager.array_contigs if contig not in old_contigs]
+        print("Contigs removed:", " ".join(contigs_removed), sep=" ", file=logfile)
+        print("Contigs added:  ", " ".join(contigs_added), sep=" ", file=logfile, flush=True)
+        
+        for contig_name in contigs_removed:
+            array = read_dict[contig]
+            if not isinstance(array, lil_matrix):
+                read_dict[contig_name] = lil_matrix(array)
+                del array
+
+        for contig_name in contigs_added:
+            array = read_dict[contig]
+            if not isinstance(array, np.ndarray):
+                read_dict[contig] = array.toarray()
+                del array
+
         finish_time = time.time()
         total_time = finish_time - start_time
         print("Counter: rebalancing finished in %d sec..." %
