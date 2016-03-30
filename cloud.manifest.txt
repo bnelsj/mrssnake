@@ -1,0 +1,5 @@
+sn	source	bam	index
+13833.fa	s3	simonsphase3/testing/13833.fa.final.sort.bam	simonsphase3/testing/13833.fa.final.sort.bam.bai
+13833.mo	s3	simonsphase3/testing/13833.mo.final.sort.bam	simonsphase3/testing/13833.mo.final.sort.bam.bai
+13833.p1	s3	simonsphase3/testing/13833.p1.final.sort.bam	simonsphase3/testing/13833.p1.final.sort.bai
+13833.s1	s3	simonsphase3/testing/13833.s1.final.sort.bam	simonsphase3/testing/13833.s1.final.sort.bam.bai
