@@ -62,6 +62,7 @@ rule map_sample:
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET), "finished/{sample}"
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
+    resources: cores=36
     shell:
         "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 36 --resources mem=155 -w 30"
 
@@ -71,13 +72,15 @@ rule download_sample:
            "MRSFASTULTRA_INDEXED"
     output: temp("bam/{sample}.bam"),
             temp("bam/{sample}.bai")
+    resources: cores=1
     run:
-        bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
-        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]
+        bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"].values[0]
+        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"].values[0]
         shell("mv {bam} {output[0]}")
         shell("mv {bai} {output[1]}")
         shell("touch {bam}")
         shell("touch {bai}")
+        shell("touch {output}")
     
 
 rule check_index:
