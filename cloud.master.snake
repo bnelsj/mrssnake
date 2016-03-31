@@ -63,6 +63,7 @@ rule map_sample:
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     resources: cores=36
+    priority: 20
     shell:
         "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 36 --resources mem=155 -w 30"
 
@@ -73,6 +74,7 @@ rule download_sample:
     output: temp("bam/{sample}.bam"),
             temp("bam/{sample}.bai")
     resources: cores=1
+    priority: 10
     run:
         bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"].values[0]
         bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"].values[0]
