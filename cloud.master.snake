@@ -73,7 +73,7 @@ rule download_sample:
             temp("bam/{sample}.bai")
     run:
         bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
-        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bai"]
+        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]
         shell("mv {bam} {output[0]}")
         shell("mv {bai} {output[1]}")
         shell("touch {bam}")
