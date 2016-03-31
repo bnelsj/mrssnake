@@ -163,6 +163,7 @@ def write_to_h5(counts, fout_handle):
 def write_wssd_to_h5(wssd_handle, fout_handle):
     """Append single contig wssd_out_file to fout hdf5 file.
        Outfile is in wssd_out_file format.
+       Exits with error if multiple contigs are in a single wssd file.
     """
     try:
         group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
@@ -172,17 +173,8 @@ def write_wssd_to_h5(wssd_handle, fout_handle):
         nodes = wssd_handle.list_nodes("/depthAndStarts_wssd/")
         if len(nodes) > 0:
             for matrix in nodes:
-                first, second, third = matrix.shape
-
-                carray_empty = tables.CArray(group,
-                                             matrix.name,
-                                             tables.UInt32Atom(),
-                                             (first, second, third),
-                                             filters=tables.Filters(complevel=1, complib="lzo")
-                                            )
-                carray_empty = matrix
+                wssd_handle.copy_node(matrix, newparent=group)
                 fout_handle.flush()
-
         else:
             print("Empty wssd file", file=sys.stderr)
 
@@ -220,7 +212,7 @@ if __name__ == "__main__":
     if args.per_contig_merge:
         if args.contig is not None:
             contig_list.append(args.contig)
-        if args.contig_file is not None:
+        if args.contigs_file is not None:
             with open(args.contigs_file, "r") as contigs_file:
                 for line in contigs_file:
                     contig_name = line.rstrip().split()[0]
@@ -261,7 +253,7 @@ if __name__ == "__main__":
 
     else:
         # Merge wssd files into single wssd_out_file
-        with tables.open_file(args.outfile, mode="a") as fout:
+        with tables.open_file(args.outfile, mode="w") as fout:
             print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
             for wssd_file in args.wssd_merge:
                 print("Reading wssd_file: %s" % wssd_file, file=sys.stdout, flush=True)
