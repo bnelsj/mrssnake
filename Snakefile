@@ -55,55 +55,60 @@ def get_multiple_contigs(sample, chr, num):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn),
-            expand("finished/{sample}", sample = SAMPLES.sn)
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
 
-rule clean:
-    input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]),
-            to_keep = "mapping/{sample}/{sample}/wssd_out_file"
-    output: touch("finished/{sample}")
-    params: sge_opts = "-l h_rt=01:00:00"
+rule wssd_merge:
+    input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
+           shelve = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    output: "mapping/{sample}/{sample}/wssd_out_file"
+    params: sge_opts="-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00"
+    log: "log/wssd_merge/{sample}.txt"
+    resources: mem=8
+    priority: 40
+    benchmark: "benchmarks/wssd_merge/{sample}.txt"
     run:
-        if CLEAN_TEMP_FILES:
-            remove_glob = os.path.commonprefix(input.to_remove) + "*"
-            shell("rm {remove_glob}")
+        tempfile = "/data/scratch/ssd/%s.wssd_out_file" % wildcards.sample
+        shell("python3 merger.py {tempfile} --wssd_merge {input.wssd}")
+        shell("rsync {tempfile} {output}")
+        shell("rm {tempfile}")
 
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
-    output: "mapping/{sample}/{sample}/wssd_out_file"
+    output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00"
-    log: "log/merge/{sample}.txt"
-    resources: mem=40
-    benchmark: "benchmarks/merger/{sample}.txt"
+    log: "log/merge/{sample}.{contig}.txt"
+    resources: mem=8
+    priority: 30
+    benchmark: "benchmarks/merge/{sample}.{contig}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-        shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --per_contig_merge')
-        shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
-        shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
+        tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --per_contig_merge --contig {wildcards.contig}')
+        shell("rsync {tempfile} {output}")
+        shell("rm {tempfile}")
 
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
-    output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
+    output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=1G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.txt"
-    resources: mem=40
+    resources: mem=8
     benchmark: "benchmarks/merger/{sample}.txt"
-    priority: 20
+    priority: 10
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
-        shell('python3 merger.py /data/scratch/ssd/{wildcards.sample}/wssd_out_file --infile_glob "{infile_glob}" --live_merge')
-        shell("rsync /data/scratch/ssd/{wildcards.sample}/wssd_out_file {output}")
-        shell("rm /data/scratch/ssd/{wildcards.sample}/wssd_out_file")
+        tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --live_merge --per_contig_merge --contig {wildcards.contig}')
+        shell("rsync {tempfile} {output}")
+        shell("rm {tempfile}")
 
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
-    params: sge_opts = "-l mfree=4G -N map_count -l h_rt=2:00:00"
+    params: sge_opts = "-l mfree=5G -N map_count -l h_rt=2:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=4
+    resources: mem=5
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
