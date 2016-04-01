@@ -1,9 +1,6 @@
 import os
 import sys
 import pysam
-import hashlib
-import json
-from MappingJob import *
 from subprocess import CalledProcessError
 
 import pandas as pd
@@ -77,7 +74,7 @@ rule merge_sparse_matrices:
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=40
-    benchmark: "benchmarks/merger/{sample}.json"
+    benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         shell("mkdir -p /data/scratch/ssd/{wildcards.sample}")
@@ -91,7 +88,7 @@ rule merge_sparse_matrices_live:
     params: sge_opts = "-l mfree=40G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.txt"
     resources: mem=40
-    benchmark: "benchmarks/merger/{sample}.json"
+    benchmark: "benchmarks/merger/{sample}.txt"
     priority: 20
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
@@ -104,7 +101,7 @@ rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
     params: sge_opts = "-l mfree=4G -N map_count -l h_rt=2:00:00"
-    benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.json" % BAM_PARTITIONS
+    benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
     resources: mem=4
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
