@@ -3,7 +3,6 @@ import sys
 import pysam
 import hashlib
 import json
-from MappingJob import *
 from subprocess import CalledProcessError
 
 import pandas as pd
