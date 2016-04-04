@@ -47,42 +47,6 @@ def add_contents_to_contigs(dat, contigs):
             contigs[contig] += matrix
     return contigs
 
-def load_matrices_live(matrices, contigs):
-    """Load matrices to contigs dictionary as they are finished."""
-    fileset = set(matrices)
-    total_infiles = len(fileset)
-    processed_infiles = set()
-    while len(fileset) > 0:
-        for infile in fileset:
-            # Check if infile exists and hasn't been modified in 5 minutes
-            if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
-                try:
-                    dat = shelve.open(infile, flag="r")
-                except error as err:
-                    print("Error: %s: %s" % (infile, str(err)), file=sys.stderr, flush=True)
-                    continue
-                else:
-                    contigs = add_contents_to_contigs(dat, contigs)
-                    dat.close()
-                    processed_infiles.add(infile)
-                    print("Loaded pickle %d of %d: %s" %
-                          (len(processed_infiles), total_infiles, infile),
-                          file=sys.stdout, flush=True)
-        fileset -= processed_infiles
-        time.sleep(30)
-    return contigs
-
-def load_matrices_post(matrices, contigs):
-    """Load matrices to contigs dictionary. Assumes all matrices exist."""
-    for i, infile in enumerate(matrices):
-        with shelve.open(infile) as dat:
-            print("Loading shelve %d of %d: %s" %
-                  (i+1, len(matrices), infile),
-                  file=sys.stdout, flush=True)
-
-            contigs = add_contents_to_contigs(dat, contigs)
-    return contigs
-
 def load_matrices_per_contig_live(matrices, contig):
     """Get counts from all matrices for a given contig dictionary as they are finished.
     """
@@ -189,34 +153,34 @@ if __name__ == "__main__":
     parser.add_argument("--contigs_file", default=None,
                         help="Tab-delimited table with contig names in the first column")
     parser.add_argument("--contig", default=None, help="Name of contig to merge")
-    parser.add_argument("--per_contig_merge", action="store_true",
-                        help="Merge matrices one contig at a time (low memory footprint)")
     parser.add_argument("--wssd_merge", nargs="+", default=None,
                         help="Merge multiple wssd_out_files")
 
     args = parser.parse_args()
 
-    if args.per_contig_merge:
-        if args.contigs_file is None and args.contig is None:
-            print("Must specify --contigs_file or --contig for per_contig_merge", file=sys.stderr)
-            sys.exit(1)
-
-    start_time = time.time()
-
-    #fout = tables.open_file(args.outfile, mode="w")
-    #print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
-
     contig_dict = {}
     contig_list = []
 
-    if args.per_contig_merge:
-        if args.contig is not None:
-            contig_list.append(args.contig)
-        if args.contigs_file is not None:
-            with open(args.contigs_file, "r") as contigs_file:
-                for line in contigs_file:
-                    contig_name = line.rstrip().split()[0]
-                    contig_list.append(contig_name)
+    if not args.wssd_merge:
+        if args.contigs_file is None and args.contig is None:
+            print("Error: Must specify --contigs_file or --contig for shelve merge",
+                  file=sys.stderr)
+            sys.exit(1)
+        else:
+            if args.contig is not None:
+                contig_list.append(args.contig)
+            if args.contigs_file is not None:
+                with open(args.contigs_file, "r") as contigs_file:
+                    for line in contigs_file:
+                        contig_name = line.rstrip().split()[0]
+                        contig_list.append(contig_name)
+    else:
+        if args.infile_glob is not None or args.infiles is not None:
+            print("Error: cannot specify infile_glob or infiles with wssd_merge", file=sys.stderr)
+            sys.exit(1)
+
+
+    start_time = time.time()
 
     infiles = []
 
@@ -231,25 +195,13 @@ if __name__ == "__main__":
         infiles = [x.replace(".dat", "").replace(".bak", "").replace(".dir", "") for x in infiles]
         infiles = list(set(infiles))
 
-    if args.per_contig_merge:
+    if args.wssd_merge is None:
         for contig_name in contig_list:
-            contig_dict = {}
-            contig_dict[contig_name] = None
+            contig_dict = {contig_name: None}
             contig_dict = load_matrices_per_contig(infiles, contig_dict)
             with tables.open_file(args.outfile, mode="a") as fout:
                 print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
                 write_to_h5(contig_dict, fout)
-
-    elif args.wssd_merge is None:
-        if args.live_merge:
-            contig_dict = load_matrices_live(infiles, contig_dict)
-        else:
-            contig_dict = load_matrices_post(infiles, contig_dict)
-        print("Finished loading shelves. Creating h5 file: %s" % args.outfile,
-              file=sys.stdout, flush=True)
-        with tables.open_file(args.outfile, mode="a") as fout:
-            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
-            write_to_h5(contig_dict, fout)
 
     else:
         # Merge wssd files into single wssd_out_file
