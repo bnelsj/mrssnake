@@ -61,7 +61,7 @@ rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
            shelve = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts="-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00"
+    params: sge_opts="-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/wssd_merge/{sample}.txt"
     resources: mem=8
     priority: 40
@@ -75,7 +75,7 @@ rule wssd_merge:
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.{contig}.txt"
     resources: mem=8
     priority: 30
@@ -83,14 +83,14 @@ rule merge_sparse_matrices:
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
-        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig} --live_merge')
         shell("rsync {tempfile} {output}")
         shell("rm {tempfile}")
 
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=1G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=1G -pe serial 1 -N merge_sample -l h_rt=48:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.txt"
     resources: mem=8
     benchmark: "benchmarks/merger/{sample}.txt"
@@ -105,7 +105,7 @@ rule merge_sparse_matrices_live:
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
-    params: sge_opts = "-l mfree=5G -N map_count -l h_rt=2:00:00"
+    params: sge_opts = "-l mfree=5G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
     resources: mem=5
