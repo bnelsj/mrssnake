@@ -62,10 +62,10 @@ rule map_sample:
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET), "finished/{sample}"
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
-    resources: cores=36
+    resources: cores=40, mem=155
     priority: 20
     shell:
-        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 36 --resources mem=155 -w 30"
+        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} -j 40 --resources mem=155 -w 30"
 
 rule download_sample:
     input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]),
