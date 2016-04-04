@@ -8,3 +8,6 @@ __pycache__/
 *.fa
 *.fasta
 __test*
+BAMS_READABLE
+MRSFASTULTRA_INDEXED
+region_matrices
