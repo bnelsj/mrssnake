@@ -41,7 +41,7 @@ def add_contents_to_contigs(dat, contigs):
     """
     for contig, matrix in dat.items():
         matrix = convert_matrix(matrix)
-        if contig not in contigs:
+        if contig not in contigs or contigs[contig] is None:
             contigs[contig] = matrix
         else:
             contigs[contig] += matrix
@@ -57,7 +57,8 @@ def load_matrices_per_contig_live(matrices, contig):
     while len(fileset) > 0:
         for infile in fileset:
             # Check if infile exists and hasn't been modified in 5 minutes
-            if os.path.isfile(infile) and time.time() - os.path.getmtime(infile) > 300:
+            # Adds .dat extension for shelve compatibility
+            if os.path.isfile(infile + ".dat") and time.time() - os.path.getmtime(infile + ".dat") > 300:
                 try:
                     dat = shelve.open(infile, flag="r")
                 except error as err:
@@ -66,12 +67,14 @@ def load_matrices_per_contig_live(matrices, contig):
                 else:
                     if contig_string in dat:
                         contig = add_contents_to_contigs(dat, contig)
-                    dat.close()
                     processed_infiles.add(infile)
                     print("Loaded shelve %d of %d: %s" %
                           (len(processed_infiles), total_infiles, infile),
                           file=sys.stdout, flush=True)
+                finally:
+                    dat.close()
         fileset -= processed_infiles
+        print("Checked all infiles. Sleeping 30s...", file=sys.stderr, flush=True)
         time.sleep(30)
     return contig
 
@@ -80,10 +83,10 @@ def load_matrices_per_contig(matrices, contig):
     """
     contig_string = list(contig)[0]
     for i, infile in enumerate(matrices):
+        print("Contig %s: loading shelve %d of %d: %s" %
+              (contig_string, i+1, len(matrices), infile),
+              file=sys.stdout, flush=True)
         with shelve.open(infile, flag="r") as dat:
-            print("Contig %s: loading shelve %d of %d: %s" %
-                  (contig_string, i+1, len(matrices), infile),
-                  file=sys.stdout, flush=True)
             matrix = None
             if contig_string in dat:
                 matrix = convert_matrix(dat[contig_string])
@@ -180,6 +183,11 @@ if __name__ == "__main__":
             sys.exit(1)
 
 
+    if args.live_merge:
+        load_func = load_matrices_per_contig_live
+    else:
+        load_func = load_matrices_per_contig
+
     start_time = time.time()
 
     infiles = []
@@ -196,11 +204,11 @@ if __name__ == "__main__":
         infiles = list(set(infiles))
 
     if args.wssd_merge is None:
-        for contig_name in contig_list:
-            contig_dict = {contig_name: None}
-            contig_dict = load_matrices_per_contig(infiles, contig_dict)
-            with tables.open_file(args.outfile, mode="a") as fout:
-                print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+        with tables.open_file(args.outfile, mode="w") as fout:
+            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+            for contig_name in contig_list:
+                contig_dict = {contig_name: None}
+                contig_dict = load_func(infiles, contig_dict)
                 write_to_h5(contig_dict, fout)
 
     else:
