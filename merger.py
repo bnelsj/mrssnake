@@ -35,22 +35,22 @@ def convert_matrix(matrix):
               file=sys.stderr, flush=True)
         sys.exit(1)
 
-def add_contents_to_contigs(dat, contigs):
-    """Take a dictionary-like object of matrices, add matrices to contigs dictionary.
+def add_contents_to_contig(dat, contig):
+    """Take a dictionary-like object of matrices, add matrices to contig dictionary.
        Converts matrices to np.ndarray automatically.
     """
-    for contig, matrix in dat.items():
-        matrix = convert_matrix(matrix)
-        if contig not in contigs or contigs[contig] is None:
-            contigs[contig] = matrix
+    contig_string = list(contig)[0]
+    if contig_string in dat:
+        matrix = convert_matrix(dat[contig_string])
+        if contig[contig_string] is None:
+            contig[contig_string] = matrix
         else:
-            contigs[contig] += matrix
-    return contigs
+            contig[contig_string] += matrix
+    return contig
 
 def load_matrices_per_contig_live(matrices, contig):
     """Get counts from all matrices for a given contig dictionary as they are finished.
     """
-    contig_string = list(contig)[0]
     fileset = set(matrices)
     total_infiles = len(fileset)
     processed_infiles = set()
@@ -58,15 +58,15 @@ def load_matrices_per_contig_live(matrices, contig):
         for infile in fileset:
             # Check if infile exists and hasn't been modified in 5 minutes
             # Adds .dat extension for shelve compatibility
-            if os.path.isfile(infile + ".dat") and time.time() - os.path.getmtime(infile + ".dat") > 300:
+            if os.path.isfile(infile + ".dat") and \
+               time.time() - os.path.getmtime(infile + ".dat") > 300:
                 try:
                     dat = shelve.open(infile, flag="r")
                 except error as err:
                     print("Error: %s: %s" % (infile, str(err)), file=sys.stderr, flush=True)
                     continue
                 else:
-                    if contig_string in dat:
-                        contig = add_contents_to_contigs(dat, contig)
+                    contig = add_contents_to_contig(dat, contig)
                     processed_infiles.add(infile)
                     print("Loaded shelve %d of %d: %s" %
                           (len(processed_infiles), total_infiles, infile),
@@ -87,14 +87,7 @@ def load_matrices_per_contig(matrices, contig):
               (contig_string, i+1, len(matrices), infile),
               file=sys.stdout, flush=True)
         with shelve.open(infile, flag="r") as dat:
-            matrix = None
-            if contig_string in dat:
-                matrix = convert_matrix(dat[contig_string])
-        if matrix is not None:
-            if contig[contig_string] is None:
-                contig[contig_string] = matrix
-            else:
-                contig[contig_string] += matrix
+            contig = add_contents_to_contig(dat, contig)
     return contig
 
 def write_to_h5(counts, fout_handle):
