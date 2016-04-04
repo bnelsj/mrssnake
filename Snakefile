@@ -83,7 +83,7 @@ rule merge_sparse_matrices:
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
-        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --per_contig_merge --contig {wildcards.contig}')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
         shell("rm {tempfile}")
 
@@ -98,7 +98,7 @@ rule merge_sparse_matrices_live:
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
         tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
-        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --live_merge --per_contig_merge --contig {wildcards.contig}')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
         shell("rm {tempfile}")
 
