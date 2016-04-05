@@ -84,6 +84,7 @@ rule merge_sparse_matrices:
         infile_glob = os.path.commonprefix(input) + "*"
         tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
         shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig} --live_merge')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
         shell("rm {tempfile}")
 
