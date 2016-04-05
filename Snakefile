@@ -90,7 +90,7 @@ rule merge_sparse_matrices:
 
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
-    output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
+    output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=1G -pe serial 1 -N merge_sample -l h_rt=48:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.txt"
     resources: mem=8
