@@ -178,7 +178,7 @@ if __name__ == "__main__":
     if args.live_merge:
         load_func = load_matrices_per_contig_live
     else:
-        load_func = load_matrices_per_contig
+        load_func = load_matrices_per_contig_live
 
     start_time = time.time()
 
