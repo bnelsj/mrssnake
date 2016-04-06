@@ -73,7 +73,7 @@ rule wssd_merge:
         shell("rm {tempfile}")
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat"])
     output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.{contig}.txt"
