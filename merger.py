@@ -67,12 +67,11 @@ def load_matrices_per_contig_live(matrices, contig):
                     continue
                 else:
                     contig = add_contents_to_contig(dat, contig)
+                    dat.close()
                     processed_infiles.add(infile)
                     print("Loaded shelve %d of %d: %s" %
                           (len(processed_infiles), total_infiles, infile),
                           file=sys.stdout, flush=True)
-                finally:
-                    dat.close()
         fileset -= processed_infiles
         print("Checked all infiles. Sleeping 30s...", file=sys.stderr, flush=True)
         time.sleep(30)
