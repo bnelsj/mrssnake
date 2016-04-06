@@ -46,11 +46,7 @@ with open(CONTIGS_FILE, "r") as reader:
 SAMPLES = pd.read_table(MANIFEST)
 
 def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s/%s.%d_%d.pkl" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
-
-def get_multiple_contigs(sample, chr, num):
-    names = SAMPLE_MAPPING_JOBS[sample]["%s.%s" % (chr, num)]
-    return ["region_matrices/%s/%s.%s.pkl" % (sample, sample, region) for region in names]
+    return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
 localrules: all, get_headers, make_jobfile
 
