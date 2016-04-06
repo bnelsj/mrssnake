@@ -196,6 +196,11 @@ if __name__ == "__main__":
         infiles = [x.replace(".dat", "").replace(".bak", "").replace(".dir", "") for x in infiles]
         infiles = list(set(infiles))
 
+    if args.infile_glob is not None or args.infiles is not None:
+        if infiles == []:
+            print("No infiles found. Exiting...", file=sys.stderr)
+            sys.exit(1)
+
     if args.wssd_merge is None:
         with tables.open_file(args.outfile, mode="w") as fout:
             print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)

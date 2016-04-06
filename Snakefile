@@ -46,11 +46,7 @@ with open(CONTIGS_FILE, "r") as reader:
 SAMPLES = pd.read_table(MANIFEST)
 
 def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s/%s.%d_%d.pkl" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
-
-def get_multiple_contigs(sample, chr, num):
-    names = SAMPLE_MAPPING_JOBS[sample]["%s.%s" % (chr, num)]
-    return ["region_matrices/%s/%s.%s.pkl" % (sample, sample, region) for region in names]
+    return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
 localrules: all, get_headers, make_jobfile
 
@@ -84,6 +80,7 @@ rule merge_sparse_matrices:
         infile_glob = os.path.commonprefix(input) + "*"
         tempfile = "/data/scratch/ssd/%s.wssd_out_file.%s" % (wildcards.sample, wildcards.contig)
         shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig} --live_merge')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
         shell("rm {tempfile}")
 

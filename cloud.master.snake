@@ -54,12 +54,11 @@ SAMPLES = pd.read_table(MANIFEST)
 localrules: all
 
 rule all:
-    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)),
-            expand("finished/{sample}", sample = SAMPLES.sn)
+    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn))
 
 rule map_sample:
     input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
-    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET), "finished/{sample}"
+    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     params: sge_opts = ""
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     resources: cores=40, mem=155
