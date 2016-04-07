@@ -116,7 +116,7 @@ rule map_and_count:
         else:
             local_index = input.index[0]
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
-        rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index --bwlimit 10000 --copy-links;
+        rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index/ --bwlimit 10000 --copy-links;
                         rsync {2} {3} --bwlimit 10000 --copy-links; 
                         touch {1}; 
                         echo Finished rsync from {0} to {1} >> /dev/stderr; 
