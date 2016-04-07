@@ -64,7 +64,11 @@ def load_matrices_per_contig_live(matrices, contig):
                     dat = shelve.open(infile, flag="r")
                 except error as err:
                     print("Error: %s: %s" % (infile, str(err)), file=sys.stderr, flush=True)
-                    continue
+                    if os.path.exists(infile + ".dir"):
+                        continue
+                    else:
+                        print("Error: %s.dir does not exist" % infile, file=sys.stderr, flush=True)
+                        sys.exit(1)
                 else:
                     contig = add_contents_to_contig(dat, contig)
                     dat.close()
