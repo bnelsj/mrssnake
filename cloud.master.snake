@@ -54,7 +54,14 @@ SAMPLES = pd.read_table(MANIFEST)
 localrules: all
 
 rule all:
-    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn))
+    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)), \
+            expand("cleaned/{sample}.txt", sample = SAMPLES.sn)
+
+rule clean:
+    input: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
+    output: touch("cleaned/{sample}.txt")
+    run:
+        shell('aws s3 rm s3://{0}/mapping/{1}/{1}/ --recursive --exclude "wssd_out_file"'.format(BUCKET, wildcards.sample))
 
 rule map_sample:
     input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
