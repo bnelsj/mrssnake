@@ -46,11 +46,7 @@ with open(CONTIGS_FILE, "r") as reader:
 SAMPLES = pd.read_table(MANIFEST)
 
 def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s/%s.%d_%d.pkl" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
-
-def get_multiple_contigs(sample, chr, num):
-    names = SAMPLE_MAPPING_JOBS[sample]["%s.%s" % (chr, num)]
-    return ["region_matrices/%s/%s.%s.pkl" % (sample, sample, region) for region in names]
+    return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
 localrules: all, get_headers, make_jobfile
 
@@ -73,7 +69,7 @@ rule wssd_merge:
         shell("rm {tempfile}")
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat"])
     output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.{contig}.txt"
@@ -106,10 +102,10 @@ rule merge_sparse_matrices_live:
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
-    params: sge_opts = "-l mfree=5G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
+    params: sge_opts = "-l mfree=10G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=5
+    resources: mem=10
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
@@ -120,7 +116,7 @@ rule map_and_count:
         else:
             local_index = input.index[0]
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
-        rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index --bwlimit 10000 --copy-links;
+        rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index/ --bwlimit 10000 --copy-links;
                         rsync {2} {3} --bwlimit 10000 --copy-links; 
                         touch {1}; 
                         echo Finished rsync from {0} to {1} >> /dev/stderr; 
