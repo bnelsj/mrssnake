@@ -62,11 +62,11 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  S3.remote(expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn))
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
 
 rule clean:
     input:  to_remove = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"])), 
-            to_keep = S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
+            to_keep = "%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET
     output: touch("finished/{sample}")
     params: sge_opts = "-l h_rt=01:00:00"
     run:
