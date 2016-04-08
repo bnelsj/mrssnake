@@ -362,12 +362,12 @@ if __name__ == "__main__":
     finally:
         samfile.close()
 
-    total_reads = sum([contig.total_reads for name, contig in contig_manager.contigs_seen.items()])
+    total_reads = sum([contig.total_reads + contig.reads for name, contig in contig_manager.contigs_seen.items()])
     print("Counter: printing read counts", file=logfile)
     for name, contig in sorted(contig_manager.contigs_seen.items(),
                                key=lambda x: x[1],
                                reverse=True):
-        print(name, contig.total_reads, sep=" ", file=logfile)
+        print(name, contig.total_reads + contig.reads, sep=" ", file=logfile)
 
     print("Counter: finished counting %d reads" % total_reads, file=logfile, flush=True)
 
