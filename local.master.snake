@@ -1,0 +1,81 @@
+"""
+This Snakefile controls mapping jobs by calling local.mapper.snake
+on a single sample. This prevents snakemake from sucking up too much memory
+building the dag when mapping many samples.
+"""
+
+import os
+import sys
+import pysam
+from subprocess import CalledProcessError
+
+import pandas as pd
+
+SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+
+shell.executable("/bin/bash")
+shell.prefix("set -euo pipefail; source %s/config.sh; " % SNAKEMAKE_DIR)
+
+if config == {}:
+    configfile: "config.yaml"
+
+MANIFEST = config["manifest"]
+REFERENCE = config["reference"]
+MASKED_REF = config[REFERENCE]["masked_ref"]
+CONTIGS_FILE = config[REFERENCE]["contigs"]
+
+BAM_PARTITIONS = config["bam_partitions"]
+UNMAPPED_PARTITIONS = config["unmapped_partitions"]
+if UNMAPPED_PARTITIONS == -1:
+    UNMAPPED_PARTITIONS = max(BAM_PARTITIONS // 500, 1)
+MAX_BP = config["max_bp_in_mem"]
+
+TMPDIR = config["tmpdir"]
+LIVE_MERGE = config["live_merge"]
+CLEAN_TEMP_FILES = config["clean_temp_files"]
+
+NJOBS = str(config["njobs"])
+
+if not os.path.exists("log"):
+    os.makedirs("log")
+
+CONTIGS = {}
+
+with open(CONTIGS_FILE, "r") as reader:
+    for line in reader:
+        contig, size = line.rstrip().split()
+        CONTIGS[contig] = int(size)
+
+SAMPLES = pd.read_table(MANIFEST)
+SAMPLES.index = SAMPLES.sn
+
+localrules: all
+
+rule all:
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
+
+rule map_sample:
+    input: lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], "MRSFASTULTRA_INDEXED"
+    output: "mapping/{sample}/{sample}/wssd_out_file"
+    params: sge_opts = ""
+    benchmark: "benchmarks/wssd_out/{sample}.txt"
+    priority: 20
+    shell:
+        """~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {params.sge_opts} -S /bin/bash" -s local.mapper.snake --config sample={wildcards.sample} -j {NJOBS} -w 30"""
+
+rule check_index:
+    input: MASKED_REF
+    output: touch("MRSFASTULTRA_INDEXED"), temp(".mrsfast_index_test_output.txt")
+    params: sge_opts = ""
+    run:
+        try:
+            shell("mrsfast --search {input[0]} --seq dummy.fq > {output[1]}")
+        except CalledProcessError as e:
+            sys.exit("Reference %s was not indexed with the current version of mrsfastULTRA. Please reindex." % input[0])
+
+rule make_chunker:
+    input: "src/chunker_cascade.cpp", "Makefile"
+    output: "bin/bam_chunker_cascade"
+    params: sge_opts = ""
+    shell:
+        "make"

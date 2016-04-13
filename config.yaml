@@ -26,3 +26,5 @@ max_bp_in_mem: 300000000
 tmpdir: $TMPDIR
 live_merge: False
 clean_temp_files: True
+
+njobs: 100
