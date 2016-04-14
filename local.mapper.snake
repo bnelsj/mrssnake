@@ -5,14 +5,17 @@ from subprocess import CalledProcessError
 
 import pandas as pd
 
-SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+SNAKEMAKE_DIR = config.get("workdir", os.path.dirname(workflow.snakefile))
 
 shell.executable("/bin/bash")
 shell.prefix("set -euo pipefail; source %s/config.sh; " % SNAKEMAKE_DIR)
 
-configfile: "config.yaml"
+configfile: "%s/config.yaml" % SNAKEMAKE_DIR
 
 MANIFEST = config["manifest"]
+if not os.path.isabs(MANIFEST):
+    MANIFEST = "%s/%s" % (SNAKEMAKE_DIR, MANIFEST)
+
 REFERENCE = config["reference"]
 MASKED_REF = config[REFERENCE]["masked_ref"]
 CONTIGS_FILE = config[REFERENCE]["contigs"]
@@ -24,6 +27,7 @@ if UNMAPPED_PARTITIONS == -1:
 MAX_BP = config["max_bp_in_mem"]
 
 TMPDIR = config["tmpdir"]
+
 LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
 
@@ -50,12 +54,18 @@ SAMPLES.index = SAMPLES.sn
 SAMPLE = config.get("sample", None)
 
 if SAMPLE is not None:
-    SAMPLES = SAMPLES.ix[SAMPLES.sn == SAMPLE,]
+    SAMPLES = SAMPLES.loc[SAMPLES.sn == SAMPLE,]
 
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
 localrules: all, get_headers, make_jobfile
+
+onsuccess:
+    shell("cp {log} snakemake.log")
+
+onerror:
+    shell("cp {log} snakemake.log")
 
 rule all:
     input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
@@ -79,7 +89,7 @@ rule merge_sparse_matrices:
     benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
+        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
 
 rule merge_wssd:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS), \
@@ -91,7 +101,7 @@ rule merge_wssd:
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     priority: 30
     run:
-        shell('python3 merger.py {output} --wssd_merge {input.wssd} &> {log}')
+        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --wssd_merge {input.wssd} &> {log}')
 
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
@@ -103,21 +113,21 @@ rule merge_sparse_matrices_live:
     priority: 10
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
+        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
 
 rule map_and_count:
-    input: bam = lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
+    input: bam = lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], chunker = "%s/bin/bam_chunker_cascade" % SNAKEMAKE_DIR, readable = "readable.{sample}.txt", mrsfast_indexed = "%s/MRSFASTULTRA_INDEXED" % SNAKEMAKE_DIR
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext)) for ext in ["dat", "dir", "bak"]]
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
     resources: mem=5
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
-    shadow: True
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
         ofprefix = output[0].replace(".dat", "")
         fifo = "%s/mrsfast_fifo" % TMPDIR
+        print(input.index, input.index[0], file=sys.stderr)
         if TMPDIR != "":
             local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index[0]))
         else:
@@ -133,13 +143,13 @@ rule map_and_count:
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
         shell("{input.chunker} -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
+            "python3 {SNAKEMAKE_DIR}/read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
             )
 
 
 rule check_bam_files:
     input: lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"]
-    output: touch("readable/{sample}.txt")
+    output: touch("readable.{sample}.txt")
     params: sge_opts = ""
     priority: 50
     run:

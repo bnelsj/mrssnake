@@ -57,11 +57,17 @@ rule all:
 rule map_sample:
     input: lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = ""
+    params: sge_opts = "-l mfree=8G -l h_rt=3:0:0:0 -N map.{sample}", tmpdir="tmp/{sample}"
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     priority: 20
     shell:
-        """~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {params.sge_opts} -S /bin/bash" -s local.mapper.snake --config sample={wildcards.sample} -j {NJOBS} -w 30"""
+        """mkdir -p {params.tmpdir};
+           pushd {params.tmpdir};
+           ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
+           -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j {NJOBS} -w 30;
+           popd;
+           rsync {params.tmpdir}/{output} {output}
+           """
 
 rule check_index:
     input: MASKED_REF
