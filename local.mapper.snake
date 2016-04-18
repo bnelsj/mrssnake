@@ -61,12 +61,6 @@ def get_sparse_matrices_from_sample(wildcards):
 
 localrules: all, get_headers, make_jobfile
 
-onsuccess:
-    shell("cp {log} snakemake.log")
-
-onerror:
-    shell("cp {log} snakemake.log")
-
 rule all:
     input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
 
@@ -118,33 +112,31 @@ rule merge_sparse_matrices_live:
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], chunker = "%s/bin/bam_chunker_cascade" % SNAKEMAKE_DIR, readable = "readable.{sample}.txt", mrsfast_indexed = "%s/MRSFASTULTRA_INDEXED" % SNAKEMAKE_DIR
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext)) for ext in ["dat", "dir", "bak"]]
-    params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
+    params: sge_opts = "-l mfree=10G -N map.{sample}.{part} -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=5
+    resources: mem=8
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
         ofprefix = output[0].replace(".dat", "")
         fifo = "%s/mrsfast_fifo" % TMPDIR
-        print(input.index, input.index[0], file=sys.stderr)
         if TMPDIR != "":
-            local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index[0]))
+            local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index))
         else:
-            local_index = input.index[0]
+            local_index = input.index
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
         rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index/ --bwlimit 10000 --copy-links;
                         rsync {2} {3} --bwlimit 10000 --copy-links; 
                         touch {1}; 
                         echo Finished rsync from {0} to {1} >> /dev/stderr; 
-                        echo Finished rsync from {2} to {3} >> /dev/stderr; """.format(MASKED_REF, mrsfast_ref_path, input.index[0], local_index)
+                        echo Finished rsync from {2} to {3} >> /dev/stderr; """.format(MASKED_REF, mrsfast_ref_path, input.index, local_index)
 
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
         shell("{input.chunker} -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 {SNAKEMAKE_DIR}/read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
-            )
+            "python3 {SNAKEMAKE_DIR}/read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}")
 
 
 rule check_bam_files:

@@ -54,21 +54,40 @@ localrules: all
 rule all:
     input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
 
+#rule map_sample:
+#    input: lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], "MRSFASTULTRA_INDEXED"
+#    output: "mapping/{sample}/{sample}/wssd_out_file"
+#    params: sge_opts = "-l mfree=8G -l h_rt=3:0:0:0 -N map.{sample}", tmpdir="tmp/{sample}"
+#    benchmark: "benchmarks/wssd_out/{sample}.txt"
+#    log: "%s/sample_map_log/{sample}.snakemake.txt" % SNAKEMAKE_DIR
+#    priority: 20
+#    run:
+#        if not os.path.exists(params.tmpdir):
+#            os.makedirs(params.tmpdir)
+#        cwd = os.getcwd()
+#        os.chdir(params.tmpdir)
+#        shell("""~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j {NJOBS} -w 30 &2> {log}""")
+#        os.chdir(cwd)
+#        shell("rsync {params.tmpdir}/{output} {output}")
+
 rule map_sample:
     input: lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], lambda wildcards: SAMPLES.loc[wildcards.sample, "index"], "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts = "-l mfree=8G -l h_rt=3:0:0:0 -N map.{sample}", tmpdir="tmp/{sample}"
     benchmark: "benchmarks/wssd_out/{sample}.txt"
+    log: "%s/sample_map_log/{sample}.snakemake.txt" % SNAKEMAKE_DIR
     priority: 20
     shell:
-        """mkdir -p {params.tmpdir};
-           pushd {params.tmpdir};
-           ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
-           -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j {NJOBS} -w 30;
-           popd;
-           rsync {params.tmpdir}/{output} {output}
-           """
-
+        """
+        mkdir -p {params.tmpdir};
+        pushd {params.tmpdir};
+        ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
+        -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} --config workdir={SNAKEMAKE_DIR} \
+        -j {NJOBS} -w 30 > {log} 2>&1;
+        popd;
+        rsync {params.tmpdir}/{output} {output}
+        """
+        
 rule check_index:
     input: MASKED_REF
     output: touch("MRSFASTULTRA_INDEXED"), temp(".mrsfast_index_test_output.txt")
