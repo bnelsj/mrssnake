@@ -10,6 +10,7 @@ from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
 S3 = S3RemoteProvider(access_key_id=os.environ["AWS_ACCESS_KEY_ID"], secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
 
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+WORKDIR = config.get("workdir", SNAKEMAKE_DIR)
 
 shell.executable("/bin/bash")
 shell.prefix("set -euo pipefail; ")
@@ -115,8 +116,8 @@ rule map_and_count:
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=5
-    log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
+    resources: mem=4
+    log: "%s/log/map/{sample}/{part}_%s.txt" % (WORKDIR, BAM_PARTITIONS)
     shadow: True
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
@@ -129,8 +130,7 @@ rule map_and_count:
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS} >> {log}; mkfifo {fifo}; ")
         shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> {log} 2>> {log} | "
-            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}"
-            )
+            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
 
 rule check_bam_files:
     input: "bam/{sample}.bam"
