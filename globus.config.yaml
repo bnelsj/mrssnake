@@ -1,0 +1,32 @@
+---
+reference: hg19
+manifest: simons.batch2.manifest.txt
+globus_manifest: /net/eichler/vol4/home/tychele/bitbucket/genus/manifests/fermilab/march2016/SSCWGS_Mar17.txt
+sample_mapping: /net/eichler/vol4/home/tychele/bitbucket/genus/manifests/aws_bucket_stats/sample_file/540families_idmapping
+
+hg19_aws:
+    masked_ref: /home/ec2-user/reference/hg19_masked
+    contigs: /home/ec2-user/reference/hg19_masked.fai
+hg19:
+    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked
+    contigs: /net/eichler/vol2/eee_shared/assemblies/hg19/indexes/mrsfastULTRA/hg19_masked.fai
+hg38:
+    masked_ref: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfastULTRA/hg38.rmsk_and_trf.canonical.fa
+    contigs: /net/eichler/vol2/eee_shared/assemblies/hg38/indexes/mrsfastULTRA/hg38.rmsk_and_trf.canonical.fa.fai
+custom_contig:
+    masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
+    contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
+
+bam_partitions: 250
+# Number of unmapped partitions. If set to -1, use bam_partitions / 500
+unmapped_partitions: -1
+
+# Maximum bp to store in numpy arrays. The rest will be in scipy sparse lil matrices
+max_bp_in_mem: 300000000
+
+# Set amazon to True if running on an EC2 instance
+tmpdir: $TMPDIR
+live_merge: False
+clean_temp_files: True
+
+njobs: 50
