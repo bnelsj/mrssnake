@@ -1,4 +1,4 @@
-unset PYTHONPATH
+#unset PYTHONPATH
 
 module purge
 
