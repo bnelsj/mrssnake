@@ -82,7 +82,7 @@ rule map_sample:
         mkdir -p {params.tmpdir};
         pushd {params.tmpdir};
         ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
-        -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} --config workdir={SNAKEMAKE_DIR} \
+        -s {SNAKEMAKE_DIR}/local.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} \
         -j {NJOBS} -w 30 > {log} 2>&1;
         popd;
         rsync {params.tmpdir}/{output} {output}
