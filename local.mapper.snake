@@ -77,7 +77,7 @@ rule clean:
 rule merge_sparse_matrices:
     input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00 -q eichler-short.q"
     log: "log/merge/{sample}.txt"
     resources: mem=8
     benchmark: "benchmarks/merger/{sample}.txt"
@@ -89,7 +89,7 @@ rule merge_wssd:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS), \
            matrices = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BAM_PARTITIONS), part=range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext=["dat", "dir"])
     output: "/mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00 -q eichler-short.q"
     log: "log/merge_wssd/{sample}.txt"
     resources: mem=8
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
@@ -100,7 +100,7 @@ rule merge_wssd:
 rule merge_sparse_matrices_live:
     input: bam = lambda wildcards: SAMPLES.loc[wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00 -q eichler-short.q"
     log: "log/merge/{sample}.{contig}.txt"
     resources: mem=8
     benchmark: "benchmarks/merger/{sample}.{contig}.txt"
