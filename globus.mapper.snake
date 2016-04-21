@@ -62,7 +62,7 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn), expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule clean:
     input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]), 
@@ -98,7 +98,7 @@ rule merge_wssd:
         shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --wssd_merge {input.wssd} &> {log}')
 
 rule merge_sparse_matrices_live:
-    input: bam = "bam/{sample}.bam", chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
+    input: bam = "%s/bam/{sample}.bam" % SNAKEMAKE_DIR, chunker = "%s/bin/bam_chunker_cascade" % SNAKEMAKE_DIR, bam_check = "readable/{sample}.txt", index_check = "%s/MRSFASTULTRA_INDEXED" % SNAKEMAKE_DIR
     output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00 -q eichler-short.q"
     log: "log/merge/{sample}.{contig}.txt"
@@ -110,7 +110,7 @@ rule merge_sparse_matrices_live:
         shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
 
 rule map_and_count:
-    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "%s/bin/bam_chunker_cascade" % SNAKEMAKE_DIR, readable = "readable.{sample}.txt", mrsfast_indexed = "%s/MRSFASTULTRA_INDEXED" % SNAKEMAKE_DIR
+    input: bam = "%s/bam/{sample}.bam" % SNAKEMAKE_DIR, index = "%s/bam/{sample}.bai" % SNAKEMAKE_DIR, chunker = "%s/bin/bam_chunker_cascade" % SNAKEMAKE_DIR, readable = "readable.{sample}.txt", mrsfast_indexed = "%s/MRSFASTULTRA_INDEXED" % SNAKEMAKE_DIR
     output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s" % (BAM_PARTITIONS, ext)) for ext in ["dat", "dir", "bak"]]
     params: sge_opts = "-l mfree=10G -N map.{sample}.{part} -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
@@ -140,7 +140,7 @@ rule map_and_count:
 
 
 rule check_bam_files:
-    input: "bam/{sample}.bam"
+    input: "%s/bam/{sample}.bam" % SNAKEMAKE_DIR
     output: touch("readable.{sample}.txt")
     params: sge_opts = ""
     priority: 50
