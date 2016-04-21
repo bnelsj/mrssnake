@@ -90,6 +90,7 @@ rule download_sample:
         shell("touch {bam}")
         shell("touch {bai}")
         shell("touch {output}")
+        shell("aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression SET instanceID $HOSTNAME")
     
 
 rule check_index:
