@@ -66,14 +66,14 @@ rule all:
     input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
 
 rule clean:
-    input:  to_remove = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"])), 
-            to_keep = "%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET
+    input:  to_remove = expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]), 
+            to_keep = "%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, intermediate = expand("intermediate/{{sample}}.{part}.done", part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: touch("finished/{sample}")
     params: sge_opts = "-l h_rt=01:00:00"
     run:
         if CLEAN_TEMP_FILES:
-            remove_glob = os.path.commonprefix(input.to_remove) + "*"
-            shell("rm {remove_glob}")
+            remove_glob = os.path.commonprefix(input.to_remove)
+            shell("aws s3 rm s3://{remove_glob}")
 
 rule merge_sparse_matrices:
     input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
@@ -109,6 +109,14 @@ rule merge_sparse_matrices_live:
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
+
+rule upload_intermediate_files:
+    input: ["%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
+    output: touch("intermediate/{sample}.{part}.done")
+    priority: 30
+    shell:
+        "aws s3 cp {input[0]} s3://{input[0]}; "
+        "aws s3 cp {input[1]} s3://{input[1]}"
 
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
