@@ -116,7 +116,8 @@ rule upload_intermediate_files:
     priority: 30
     shell:
         "aws s3 cp {input[0]} s3://{input[0]}; "
-        "aws s3 cp {input[1]} s3://{input[1]}"
+        "aws s3 cp {input[1]} s3://{input[1]}; "
+        "aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression ADD finished_chunks 1"
 
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
