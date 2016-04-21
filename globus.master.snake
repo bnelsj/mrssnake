@@ -121,8 +121,8 @@ rule download_sample:
         bai_out = os.path.abspath(output[1])
         shell(""". ~/.globus/globus.config; . /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/config.sh;
         bash /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/setup.sh; 
-        globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out};
-        globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out}""")
+        globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} || true;
+        globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} || true""")
 
 rule check_index:
     input: MASKED_REF
