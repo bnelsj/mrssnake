@@ -15,8 +15,8 @@ custom_contig:
     masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
-bam_partitions: 250
-unmapped_partitions: -1
+bam_partitions: 500
+unmapped_partitions: 4
 
 # Maximum bp to store in numpy arrays. The rest will be in scipy sparse lil matrices
 max_bp_in_mem: 300000000
