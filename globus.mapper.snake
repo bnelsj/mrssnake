@@ -10,7 +10,7 @@ SNAKEMAKE_DIR = config.get("workdir", os.path.dirname(workflow.snakefile))
 shell.executable("/bin/bash")
 shell.prefix("set -euo pipefail; source %s/config.sh; " % SNAKEMAKE_DIR)
 
-configfile: "%s/config.yaml" % SNAKEMAKE_DIR
+configfile: "%s/globus.config.yaml" % SNAKEMAKE_DIR
 
 MANIFEST = config["manifest"]
 if not os.path.isabs(MANIFEST):
