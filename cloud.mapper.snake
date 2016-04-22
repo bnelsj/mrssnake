@@ -5,8 +5,13 @@ from subprocess import CalledProcessError
 
 import pandas as pd
 
+import boto.dynamodb
+
 from snakemake.remote.S3 import RemoteProvider as S3RemoteProvider
 
+conn = boto.dynamodb.connect_to_region("us-east-1",
+                                       aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                                       aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
 S3 = S3RemoteProvider(access_key_id=os.environ["AWS_ACCESS_KEY_ID"], secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
 
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
@@ -118,7 +123,11 @@ rule upload_intermediate_files:
     shell:
         "aws s3 cp {input[0]} s3://{input[0]}; "
         "aws s3 cp {input[1]} s3://{input[1]}; "
-        "aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression ADD finished_chunks 1"
+        dynamo_table = conn.get_table("SimonsRDTracking")
+        sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
+        sample_item[finished_chunks] += 1
+        sample_item.put()
+        #"""aws dynamodb update-item --table-name SimonsRDTracking --key '{{"wssdID": {{"S": "{wildcards.sample}"}}}}' --update-expression "ADD finished_chunks :n" --expression-attribute-values '{{":n": {{"N": "1"}}}}'"""
 
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
