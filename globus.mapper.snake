@@ -57,8 +57,6 @@ SAMPLES.index = SAMPLES.sn
 SAMPLE = config.get("sample", None)
 
 if SAMPLE is not None:
-    print(SAMPLE)
-    print(SAMPLES)
     SAMPLES = SAMPLES.ix[SAMPLES.sn == SAMPLE,]
 
 def get_sparse_matrices_from_sample(wildcards):
