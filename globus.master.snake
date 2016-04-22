@@ -21,6 +21,7 @@ if config == {}:
 
 MANIFEST = config["manifest"]
 GLOBUS_MANIFEST = config["globus_manifest"]
+GLOBUS_CONFIG = config["globus_config"]
 SAMPLE_MAPPING = config["sample_mapping"]
 
 REFERENCE = config["reference"]
@@ -101,7 +102,7 @@ rule map_sample:
         """
         mkdir -p {params.tmpdir};
         pushd {params.tmpdir};
-        ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
+        ~bnelsj/src/snakemake/bin/snakemake --drmaa " -V -cwd -w n -e ./log -o ./log {{params.sge_opts}} -S /bin/bash" \
         -s {SNAKEMAKE_DIR}/globus.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} \
         -j {NJOBS} -w 30 > {log} 2>&1;
         popd;
@@ -119,7 +120,7 @@ rule download_sample:
         globus_bai = [fn for fn in GLOBUS_FILES if sn in fn and fn.endswith(".bai")][0]
         bam_out = os.path.abspath(output[0])
         bai_out = os.path.abspath(output[1])
-        shell(""". ~/.globus/globus.config; . /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/config.sh;
+        shell(""". ~/.globus/globus.config; . {GLOBUS_CONFIG};
         bash /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/setup.sh; 
         globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} || true;
         globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} || true""")
