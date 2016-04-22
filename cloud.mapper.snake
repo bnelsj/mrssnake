@@ -63,7 +63,7 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn), expand("finished/{sample}", sample = SAMPLES.sn)
 
 rule clean:
     input:  to_remove = expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]), 
@@ -114,9 +114,11 @@ rule upload_intermediate_files:
     input: ["%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
     output: touch("intermediate/{sample}.{part}.done")
     priority: 30
+    resources: mem=0
     shell:
         "aws s3 cp {input[0]} s3://{input[0]}; "
-        "aws s3 cp {input[1]} s3://{input[1]}"
+        "aws s3 cp {input[1]} s3://{input[1]}; "
+        "aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression ADD finished_chunks 1"
 
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"

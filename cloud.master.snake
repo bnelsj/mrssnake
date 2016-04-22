@@ -60,8 +60,9 @@ rule all:
 rule clean:
     input: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     output: touch("cleaned/{sample}.txt")
-    run:
-        shell('aws s3 rm s3://{0}/mapping/{1}/{1}/ --recursive --exclude "wssd_out_file"'.format(BUCKET, wildcards.sample))
+    shell:
+        'aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression SET finished 1'
+        'aws s3 rm s3://{BUCKET}/mapping/{wildcards.sample}/{wildcards.sample}/ --recursive --exclude "wssd_out_file"'
 
 rule map_sample:
     input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
@@ -71,7 +72,7 @@ rule map_sample:
     resources: cores=40, mem=156
     priority: 20
     shell:
-        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j 31 --resources mem=148 -w 30"
+        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j 30 --resources mem=148 -w 30"
 
 rule download_sample:
     input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]),
@@ -89,6 +90,7 @@ rule download_sample:
         shell("touch {bam}")
         shell("touch {bai}")
         shell("touch {output}")
+        shell("aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression SET instanceID $HOSTNAME")
     
 
 rule check_index:
