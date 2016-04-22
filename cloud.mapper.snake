@@ -120,12 +120,12 @@ rule upload_intermediate_files:
     output: touch("intermediate/{sample}.{part}.done")
     priority: 30
     resources: mem=0
-    shell:
-        "aws s3 cp {input[0]} s3://{input[0]}; "
-        "aws s3 cp {input[1]} s3://{input[1]}; "
+    run:
+        shell("aws s3 cp {input[0]} s3://{input[0]}")
+        shell("aws s3 cp {input[1]} s3://{input[1]}")
         dynamo_table = conn.get_table("SimonsRDTracking")
-        sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
-        sample_item[finished_chunks] += 1
+        sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
+        sample_item["finished_chunks"] += 1
         sample_item.put()
         #"""aws dynamodb update-item --table-name SimonsRDTracking --key '{{"wssdID": {{"S": "{wildcards.sample}"}}}}' --update-expression "ADD finished_chunks :n" --expression-attribute-values '{{":n": {{"N": "1"}}}}'"""
 
