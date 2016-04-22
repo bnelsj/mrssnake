@@ -22,6 +22,7 @@ if config == {}:
 MANIFEST = config["manifest"]
 GLOBUS_MANIFEST = config["globus_manifest"]
 GLOBUS_CONFIG = config["globus_config"]
+GLOBUS_SETUP = config["globus_setup"]
 SAMPLE_MAPPING = config["sample_mapping"]
 
 REFERENCE = config["reference"]
@@ -121,7 +122,7 @@ rule download_sample:
         bam_out = os.path.abspath(output[0])
         bai_out = os.path.abspath(output[1])
         shell(""". ~/.globus/globus.config; . {GLOBUS_CONFIG};
-        bash /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/setup.sh; 
+        bash {GLOBUS_SETUP};
         globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} || true;
         globus-url-copy -c -vb -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} || true""")
 
