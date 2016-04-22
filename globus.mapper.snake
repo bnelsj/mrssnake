@@ -49,12 +49,17 @@ with open(CONTIGS_FILE, "r") as reader:
         CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
+if "sn" not in SAMPLES.columns:
+    SAMPLES["sn"] = SAMPLES["Individual_ID"].str.replace(".", "_")
+
 SAMPLES.index = SAMPLES.sn
 # Only map given sample if specified
 SAMPLE = config.get("sample", None)
 
 if SAMPLE is not None:
-    SAMPLES = SAMPLES.loc[SAMPLES.sn == SAMPLE,]
+    print(SAMPLE)
+    print(SAMPLES)
+    SAMPLES = SAMPLES.ix[SAMPLES.sn == SAMPLE,]
 
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
