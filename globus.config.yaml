@@ -1,7 +1,7 @@
 ---
 reference: hg19
 manifest: simons.20160420.bradn.local.txt
-globus_manifest: /net/eichler/vol4/home/tychele/bitbucket/genus/manifests/fermilab/march2016/SSCWGS_Mar17.txt
+globus_manifest: /net/eichler/vol21/projects/simons_genome_project/nobackups/bnelsj/simons_metadata/manifest.merged.globus.md5.tab
 globus_config: /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/config.sh
 globus_setup: /net/eichler/vol26/7200/simons_genome_project/bnelsj_globus/setup.sh
 sample_mapping: /net/eichler/vol4/home/tychele/bitbucket/genus/manifests/aws_bucket_stats/sample_file/540families_idmapping
