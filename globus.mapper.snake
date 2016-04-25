@@ -86,7 +86,7 @@ rule merge_sparse_matrices:
     benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
+        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}"')
 
 rule merge_wssd:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS), \
