@@ -89,7 +89,7 @@ rule merge_sparse_matrices:
     benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
+        shell('python3 merger.py {output} --infile_glob "{infile_glob}"')
 
 rule merge_wssd:
     input: wssd = S3.remote(expand("%s/mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}" % BUCKET, contig = CONTIGS)), \
