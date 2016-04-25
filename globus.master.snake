@@ -128,8 +128,12 @@ rule download_sample:
 
         fam_sn = wildcards.sample.replace("_", ".")
         sn = SAMPLE_DICT[fam_sn]
-        globus_bam = GLOBUS_DAT.ix[wildcards.sample, "bam"]
-        globus_bai = GLOBUS_DAT.ix[wildcards.sample, "bai"]
+        try:
+            globus_bam = GLOBUS_DAT.ix[wildcards.sample, "bam"]
+            globus_bai = GLOBUS_DAT.ix[wildcards.sample, "bai"]
+        except KeyError as e:
+            print("Error: %s" % str(e), file=sys.stderr)
+            sys.exit(1)
         bam_md5 = GLOBUS_DAT.ix[wildcards.sample, "md5_bam"]
         bai_md5 = GLOBUS_DAT.ix[wildcards.sample, "md5_bai"]
         bam_out = os.path.abspath(output[0])
