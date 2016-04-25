@@ -95,6 +95,14 @@ rule all:
 #        os.chdir(cwd)
 #        shell("rsync {params.tmpdir}/{output} {output}")
 
+rule clean:
+    input: "mapping/{sample}/{sample}/wssd_out_file"
+    output: "cleaned/{sample}.txt"
+    params: sge_opts=""
+    priority: 30
+    shell:
+        "rm bam/{sample}.*"
+
 rule map_sample:
     input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
     output: "mapping/{sample}/{sample}/wssd_out_file"
