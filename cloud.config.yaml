@@ -25,4 +25,4 @@ max_bp_in_mem: 300000000
 bucket: simonsphase3
 tmpdir:
 live_merge: True
-clean_temp_files: False
+clean_temp_files: True
