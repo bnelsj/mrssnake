@@ -208,17 +208,13 @@ def rebalance_contigs(contig_manager, read_dict):
         
         for contig_name in contigs_removed:
             if contig_name in read_dict:
-                array = read_dict[contig_name]
-                if not isinstance(array, lil_matrix):
-                    read_dict[contig_name] = lil_matrix(array)
-                    del array
+                if not isinstance(read_dict[contig_name], lil_matrix):
+                    read_dict[contig_name] = lil_matrix(read_dict[contig_name])
 
         for contig_name in contigs_added:
             if contig_name in read_dict:
-                array = read_dict[contig_name]
-                if not isinstance(array, np.ndarray):
-                    read_dict[contig_name] = array.toarray()
-                    del array
+                if not isinstance(read_dict[contig_name], np.ndarray):
+                    read_dict[contig_name] = read_dict[contig_name].toarray()
 
         finish_time = time.time()
         total_time = finish_time - start_time

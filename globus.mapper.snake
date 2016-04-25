@@ -10,7 +10,7 @@ SNAKEMAKE_DIR = config.get("workdir", os.path.dirname(workflow.snakefile))
 shell.executable("/bin/bash")
 shell.prefix("set -euo pipefail; source %s/config.sh; " % SNAKEMAKE_DIR)
 
-configfile: "%s/config.yaml" % SNAKEMAKE_DIR
+configfile: "%s/globus.config.yaml" % SNAKEMAKE_DIR
 
 MANIFEST = config["manifest"]
 if not os.path.isabs(MANIFEST):
@@ -49,12 +49,15 @@ with open(CONTIGS_FILE, "r") as reader:
         CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
+if "sn" not in SAMPLES.columns:
+    SAMPLES["sn"] = SAMPLES["Individual_ID"].str.replace(".", "_")
+
 SAMPLES.index = SAMPLES.sn
 # Only map given sample if specified
 SAMPLE = config.get("sample", None)
 
 if SAMPLE is not None:
-    SAMPLES = SAMPLES.loc[SAMPLES.sn == SAMPLE,]
+    SAMPLES = SAMPLES.ix[SAMPLES.sn == SAMPLE,]
 
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
@@ -83,7 +86,7 @@ rule merge_sparse_matrices:
     benchmark: "benchmarks/merger/{sample}.txt"
     run:
         infile_glob = os.path.commonprefix(input) + "*"
-        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}" --per_contig_merge')
+        shell('python3 {SNAKEMAKE_DIR}/merger.py {output} --infile_glob "{infile_glob}"')
 
 rule merge_wssd:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS), \
