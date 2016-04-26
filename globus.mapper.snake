@@ -71,7 +71,7 @@ rule clean:
     input:  to_remove = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat", "bak", "dir"]), 
             to_keep = "mapping/{sample}/{sample}/wssd_out_file"
     output: touch("finished/{sample}")
-    params: sge_opts = "-l h_rt=01:00:00"
+    params: sge_opts = "-l h_rt=0:30:00"
     run:
         if CLEAN_TEMP_FILES:
             remove_glob = os.path.commonprefix(input.to_remove) + "*"
