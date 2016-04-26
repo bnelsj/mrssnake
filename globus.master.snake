@@ -151,13 +151,13 @@ rule download_sample:
             print("bai md5 remote: %s local: %s" % (bai_md5, download_bai_md5), flush=True)
             shell(""". ~/.globus/globus.config; . {GLOBUS_CONFIG};
             bash {GLOBUS_SETUP};
-            globus-url-copy -c -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} || true;""")
+            globus-url-copy -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} || true;""")
             download_bai_md5 = hashfile(open(bai_out, "rb"), hashlib.md5())
         while bam_md5 != download_bam_md5:
             print("bam md5 remote: %s local: %s" % (bam_md5, download_bam_md5), flush=True)
             shell(""". ~/.globus/globus.config; . {GLOBUS_CONFIG};
             bash {GLOBUS_SETUP};
-            globus-url-copy -c -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} || true""")
+            globus-url-copy -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} || true""")
             download_bam_md5 = hashfile(open(bam_out, "rb"), hashlib.md5())
 
 rule check_index:
