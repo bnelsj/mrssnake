@@ -94,7 +94,7 @@ rule merge_wssd:
         shell('python3 merger.py {output} --wssd_merge {input.wssd} &> {log}')
 
 rule merge_sparse_matrices_live:
-    input: bam = "bam/{sample}.bam", chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt", index_check = "MRSFASTULTRA_INDEXED"
+    input: bam = "bam/{sample}.bam", chunker = "bin/bam_chunker_cascade", bam_check = "readable/{sample}.txt"
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET, keep_local=True)
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.{contig}.txt"
@@ -120,7 +120,7 @@ rule upload_intermediate_files:
         #"""aws dynamodb update-item --table-name SimonsRDTracking --key '{{"wssdID": {{"S": "{wildcards.sample}"}}}}' --update-expression "ADD finished_chunks :n" --expression-attribute-values '{{":n": {{"N": "1"}}}}'"""
 
 rule map_and_count:
-    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
+    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt"
     output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s", keep_local=True) % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, "bak"))
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
