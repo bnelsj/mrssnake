@@ -72,8 +72,8 @@ rule clean:
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
         sample_item["finished"] = 1
         sample_item.put()
-        #'aws dynamodb update-item --table-name SimonsRDTracking --key {wildcards.sample} --update-expression SET finished 1'
-        shell('aws s3 rm s3://{BUCKET}/mapping/{wildcards.sample}/{wildcards.sample}/ --recursive --exclude "wssd_out_file"')
+        shell("aws s3 rm s3://{BUCKET}/mapping/{wildcards.sample}/{wildcards.sample} --recursive --exclude wssd_out_file")
+        shell("aws s3 rm s3://{BUCKET}/region_matrices/{wildcards.sample} --recursive")
 
 rule map_sample:
     input: "bam/{sample}.bam", "bam/{sample}.bai", "MRSFASTULTRA_INDEXED"
