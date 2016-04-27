@@ -67,6 +67,7 @@ rule all:
 rule clean:
     input: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET)
     output: touch("cleaned/{sample}.txt")
+    priority: 30
     run:
         dynamo_table = conn.get_table("SimonsRDTracking")
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
