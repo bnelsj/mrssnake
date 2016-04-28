@@ -53,11 +53,12 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
+    input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
 
 rule clean:
     input: "mapping/{sample}/{sample}/wssd_out_file"
     output: touch("finished/{sample}.txt")
+    priority: 50
     run:
         if REMOVE_BAMS:
             bam = SAMPLES.loc[wildcards.sample, "bam"]
