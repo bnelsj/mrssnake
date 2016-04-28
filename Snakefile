@@ -27,6 +27,7 @@ MAX_BP = config["max_bp_in_mem"]
 TMPDIR = config["tmpdir"]
 LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
+REMOVE_BAMS = config["remove_bams"]
 
 if LIVE_MERGE:
     ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
@@ -44,6 +45,7 @@ with open(CONTIGS_FILE, "r") as reader:
         CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
+SAMPLES.index = SAMPLES.sn
 
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
@@ -51,7 +53,18 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
+    input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
+
+rule clean:
+    input: "mapping/{sample}/{sample}/wssd_out_file"
+    output: touch("finished/{sample}.txt")
+    priority: 50
+    run:
+        if REMOVE_BAMS:
+            bam = SAMPLES.loc[wildcards.sample, "bam"]
+            bai = SAMPLES.loc[wildcards.sample, "bai"]
+            os.remove(bam)
+            os.remove(bai)
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
