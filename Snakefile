@@ -50,7 +50,7 @@ SAMPLES.index = SAMPLES.sn
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
-localrules: all, get_headers, make_jobfile
+localrules: all, get_headers, make_jobfile, clean
 
 rule all:
     input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
