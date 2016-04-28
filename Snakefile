@@ -62,7 +62,7 @@ rule clean:
     run:
         if REMOVE_BAMS:
             bam = SAMPLES.loc[wildcards.sample, "bam"]
-            bai = SAMPLES.loc[wildcards.sample, "bai"]
+            bai = SAMPLES.loc[wildcards.sample, "index"]
             os.remove(bam)
             os.remove(bai)
 
