@@ -68,7 +68,8 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn), \
+            expand("intermediate/{sample}.{part}.done", sample = SAMPLES.sn, part= range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
 
 rule merge_sparse_matrices:
     input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
@@ -117,7 +118,6 @@ rule upload_intermediate_files:
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
         sample_item["finished_chunks"] += 1
         sample_item.put()
-        #"""aws dynamodb update-item --table-name SimonsRDTracking --key '{{"wssdID": {{"S": "{wildcards.sample}"}}}}' --update-expression "ADD finished_chunks :n" --expression-attribute-values '{{":n": {{"N": "1"}}}}'"""
 
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade", readable = "readable/{sample}.txt"
@@ -140,16 +140,3 @@ rule map_and_count:
         shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> {log} 2>> {log} | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
-
-rule check_bam_files:
-    input: "bam/{sample}.bam"
-    output: touch("readable/{sample}.txt")
-    params: sge_opts = ""
-    priority: 50
-    run:
-        for bamfile in input:
-            try:
-                test = pysam.AlignmentFile(bamfile)
-            except ValueError as e:
-                print("Error: could not open %s as bam.\n%s" % (bamfile, str(e)), file = sys.stderr)
-                sys.exit(1)
