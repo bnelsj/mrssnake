@@ -84,7 +84,7 @@ rule map_sample:
     resources: cores=40, mem=156
     priority: 20
     shell:
-        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j 30 --resources mem=130 -w 30"
+        "snakemake -s cloud.mapper.snake --config sample={wildcards.sample} workdir={SNAKEMAKE_DIR} -j 30 --resources mem=130 -w 30 -T"
 
 rule download_sample:
     input: lambda wildcards: S3.remote(SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]),
