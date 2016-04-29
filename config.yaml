@@ -1,6 +1,6 @@
 ---
 reference: hg19
-manifest: manifest.txt
+manifest: test.manifest.tab
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked
@@ -26,5 +26,6 @@ max_bp_in_mem: 300000000
 tmpdir: $TMPDIR
 live_merge: False
 clean_temp_files: True
+remove_bams: False
 
 njobs: 100
