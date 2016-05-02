@@ -68,8 +68,8 @@ def get_sparse_matrices_from_sample(wildcards):
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn), \
-            expand("intermediate/{sample}.{part}.done", sample = SAMPLES.sn, part= range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
+            
 
 rule merge_sparse_matrices:
     input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
@@ -106,22 +106,9 @@ rule merge_sparse_matrices_live:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
 
-rule upload_intermediate_files:
-    input: ["%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
-    output: touch("intermediate/{sample}.{part}.done")
-    priority: 30
-    resources: mem=1
-    run:
-        shell("aws s3 cp {input[0]} s3://{input[0]}")
-        shell("aws s3 cp {input[1]} s3://{input[1]}")
-        dynamo_table = conn.get_table("SimonsRDTracking")
-        sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
-        sample_item["finished_chunks"] += 1
-        sample_item.put()
-
 rule map_and_count:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade"
-    output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s", keep_local=True) % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]], temp("%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, "bak"))
+    output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s", keep_local=True) % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
@@ -140,3 +127,11 @@ rule map_and_count:
         shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> {log} 2>> {log} | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
+        shell("aws s3 cp {output[0]} s3://{output[0]}")
+        shell("aws s3 cp {output[1]} s3://{output[1]}")
+        dynamo_table = conn.get_table("SimonsRDTracking")
+        sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
+        sample_item["finished_chunks"] += 1
+        sample_item.put()
+
+
