@@ -50,7 +50,7 @@ SAMPLES.index = SAMPLES.sn
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
-localrules: all, get_headers, make_jobfile
+localrules: all, get_headers, make_jobfile, clean
 
 rule all:
     input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
@@ -62,7 +62,7 @@ rule clean:
     run:
         if REMOVE_BAMS:
             bam = SAMPLES.loc[wildcards.sample, "bam"]
-            bai = SAMPLES.loc[wildcards.sample, "bai"]
+            bai = SAMPLES.loc[wildcards.sample, "index"]
             os.remove(bam)
             os.remove(bai)
 
@@ -127,7 +127,7 @@ rule map_and_count:
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
         rsync_opts = """rsync {0}.index /var/tmp/mrsfast_index/ --bwlimit 10000 --copy-links;
                         rsync {2} {3} --bwlimit 10000 --copy-links; 
-                        touch {1}; 
+                        if [[ ! -e {1} ]]; then touch {1}; fi; 
                         echo Finished rsync from {0} to {1} >> /dev/stderr; 
                         echo Finished rsync from {2} to {3} >> /dev/stderr; """.format(MASKED_REF, mrsfast_ref_path, input.index[0], local_index)
 
