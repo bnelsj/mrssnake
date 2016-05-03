@@ -71,8 +71,10 @@ with open(CONTIGS_FILE, "r") as reader:
 
 SAMPLES = pd.read_table(MANIFEST)
 if "sn" not in SAMPLES.columns:
-    SAMPLES.sn = SAMPLES["Individual_ID"].str.replace(".", "_")
+    SAMPLES["sn"] = SAMPLES["Individual_ID"].str.replace(".", "_")
 SAMPLES.index = SAMPLES.sn
+
+SAMPLES = SAMPLES.ix[SAMPLES.sn.isin(GLOBUS_DAT.wssdID),]
 
 localrules: all
 
@@ -126,8 +128,8 @@ rule download_all:
 
 rule download_sample:
     input: GLOBUS_MANIFEST 
-    output: "bam/{sample}.bam", "bam/{sample}.bai", touch("download_finished/{sample}.txt")
-    params: sge_opts = "-l mfree=2G -N dwnld_{sample} -l h_rt=1:0:0:0"
+    output: "bam/{sample}.bam", "bam/{sample}.bai", "download_finished/{sample}.txt"
+    params: sge_opts = "-l mfree=1G -N dwnld_{sample} -l h_rt=1:0:0:0 -l gpfsstate=0 -q eichler-short.q"
     log: "globus_log/{sample}.txt"
     run:
         import hashlib
@@ -151,16 +153,26 @@ rule download_sample:
         bam_out = os.path.abspath(output[0])
         bai_out = os.path.abspath(output[1])
         download_bai_md5, download_bam_md5 = "", ""
-        while bai_md5 != download_bai_md5:
-            print("%s bai md5 remote: %s local: %s" % (wildcards.sample, bai_md5, download_bai_md5), flush=True)
-            shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
-            globus-url-copy -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} >> {log} 2>&1""")
-            download_bai_md5 = hashfile(open(bai_out, "rb"), hashlib.md5())
-        while bam_md5 != download_bam_md5:
-            print("%s bam md5 remote: %s local: %s" % (wildcards.sample, bam_md5, download_bam_md5), flush=True)
-            shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
-            globus-url-copy -p 8 -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} >> {log} 2>&1""")
-            download_bam_md5 = hashfile(open(bam_out, "rb"), hashlib.md5())
+        #while bai_md5 != download_bai_md5:
+        #print("%s bai md5 remote: %s local: %s" % (wildcards.sample, bai_md5, download_bai_md5), flush=True)
+        #shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
+        #globus-url-copy -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} >> {log} 2>&1""")
+        shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
+        globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} -" > {bai_out}""")
+
+        #download_bai_md5 = hashfile(open(bai_out, "rb"), hashlib.md5())
+        #while bam_md5 != download_bam_md5:
+        #print("%s bam md5 remote: %s local: %s" % (wildcards.sample, bam_md5, download_bam_md5), flush=True)
+        #shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
+        #globus-url-copy -p 8 -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} >> {log} 2>&1""")
+        shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
+        globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} -" > {bam_out}""")
+        download_bam_md5 = hashfile(open(bam_out, "rb"), hashlib.md5())
+        if bam_md5 == download_bam_md5:
+            shell("touch output[2]")
+        else:
+            print("Bam file corrupted or incomplete: %s" % bam_out)
+            sys.exit(1)
 
 rule check_index:
     input: MASKED_REF
