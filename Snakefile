@@ -65,6 +65,8 @@ rule clean:
             bai = SAMPLES.loc[wildcards.sample, "index"]
             os.remove(bam)
             os.remove(bai)
+        if CLEAN_TEMP_FILES:
+            shell("rm region_matrices/{sample}/*")
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
