@@ -153,21 +153,24 @@ rule download_sample:
         bam_out = os.path.abspath(output[0])
         bai_out = os.path.abspath(output[1])
         download_bai_md5, download_bam_md5 = "", ""
+        shell("if [[ -e {log} ]]; then rm {log}; fi")
         #while bai_md5 != download_bai_md5:
         #print("%s bai md5 remote: %s local: %s" % (wildcards.sample, bai_md5, download_bai_md5), flush=True)
-        #shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
-        #globus-url-copy -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} >> {log} 2>&1""")
-        shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
-        globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} -" > {bai_out}""")
+        shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
+        globus-url-copy -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} file://{bai_out} >> {log} 2>&1""")
+        #shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
+        #globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bai} -" > {bai_out}""")
 
         #download_bai_md5 = hashfile(open(bai_out, "rb"), hashlib.md5())
         #while bam_md5 != download_bam_md5:
         #print("%s bam md5 remote: %s local: %s" % (wildcards.sample, bam_md5, download_bam_md5), flush=True)
-        #shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
-        #globus-url-copy -p 8 -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} >> {log} 2>&1""")
-        shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
-        globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} -" > {bam_out}""")
+        shell(""". ~/.globus/globus.config >> {log} 2>&1; . {GLOBUS_CONFIG} >> {log} 2>&1; bash {GLOBUS_SETUP} >> {log} 2>&1;
+        globus-url-copy -p 10 -vb -dbg -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} file://{bam_out} >> {log} 2>&1""")
+        #shell("""ssh weasel "set -o noclobber; . ~/.globus/globus.config > /dev/null; . {GLOBUS_CONFIG} > /dev/null; bash {GLOBUS_SETUP} > /dev/null;
+        #globus-url-copy -q -bs 200000000 -tcp-bs 200000000 -rst -rst-retries 0 gsiftp://fndca1.fnal.gov:2811//{globus_bam} -" > {bam_out}""")
         download_bam_md5 = hashfile(open(bam_out, "rb"), hashlib.md5())
+        print("Source bam md5: %s" % bam_md5)
+        print("Local bam md5:  %s" % download_bam_md5)
         if bam_md5 == download_bam_md5:
             shell("touch output[2]")
         else:
