@@ -81,7 +81,7 @@ rule merge_wssd:
         shell('python3 merger.py {output} --wssd_merge {input.wssd} &> {log}')
 
 rule merge_sparse_matrices:
-    input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
+    input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext=["dat", "dir"]))
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET, keep_local=True)
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.{contig}.txt"
