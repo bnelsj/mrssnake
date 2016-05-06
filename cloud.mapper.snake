@@ -56,7 +56,6 @@ with open(CONTIGS_FILE, "r") as reader:
         CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
-# Only map given sample if specified
 SAMPLE = config.get("sample", None)
 
 if SAMPLE is not None:
@@ -70,21 +69,8 @@ localrules: all, get_headers, make_jobfile
 rule all:
     input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, sample = SAMPLES.sn)
             
-
-rule merge_sparse_matrices:
-    input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
-    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, keep_local=True)
-    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
-    log: "log/merge/{sample}.txt"
-    resources: mem=8
-    benchmark: "benchmarks/merger/{sample}.txt"
-    run:
-        infile_glob = os.path.commonprefix(input) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}"')
-
 rule merge_wssd:
-    input: wssd = S3.remote(expand("%s/mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}" % BUCKET, contig = CONTIGS)), \
-           matrices = S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part=range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext=["dat", "dir"]))
+    input: wssd = S3.remote(expand("%s/mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}" % BUCKET, contig = CONTIGS))
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file" % BUCKET, keep_local=True)
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=24:00:00"
     log: "log/merge_wssd/{sample}.txt"
@@ -94,8 +80,20 @@ rule merge_wssd:
     run:
         shell('python3 merger.py {output} --wssd_merge {input.wssd} &> {log}')
 
+rule merge_sparse_matrices:
+    input: S3.remote(expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)))
+    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET, keep_local=True)
+    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
+    log: "log/merge/{sample}.{contig}.txt"
+    resources: mem=8
+    benchmark: "benchmarks/merger/{sample}.{contig}.txt"
+    priority: 10
+    run:
+        infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
+        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} > {log} 2>&1')
+
 rule merge_sparse_matrices_live:
-    input: bam = "bam/{sample}.bam", chunker = "bin/bam_chunker_cascade"
+    input: bam = "bam/{sample}.bam"
     output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET, keep_local=True)
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
     log: "log/merge/{sample}.{contig}.txt"
@@ -107,8 +105,8 @@ rule merge_sparse_matrices_live:
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
 
 rule map_and_count:
-    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai", chunker = "bin/bam_chunker_cascade"
-    output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s", keep_local=True) % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
+    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai"
+    output: [S3.remote("%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, ext), keep_local=True) for ext in ["dat", "dir"]]
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
@@ -124,7 +122,7 @@ rule map_and_count:
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
 
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS} >> {log}; mkfifo {fifo}; ")
-        shell("{input.chunker} -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
+        shell("bin/bam_chunker_cascade -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> {log} 2>> {log} | "
             "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
         shell("aws s3 cp {output[0]} s3://{output[0]}")
