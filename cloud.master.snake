@@ -96,11 +96,8 @@ rule download_sample:
     run:
         bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"].values[0]
         bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"].values[0]
-        shell("mv {bam} {output[0]}")
-        shell("mv {bai} {output[1]}")
-        shell("touch {bam}")
-        shell("touch {bai}")
-        shell("touch {output}")
+        shell("cp -p {bam} {output[0]}")
+        shell("cp -p {bai} {output[1]}")
         dynamo_table = conn.get_table("SimonsRDTracking")
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
         sample_item["instanceIP"] = INSTANCE_IP
