@@ -73,7 +73,7 @@ rule wssd_merge:
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     run:
         tempfile = "%s/%s.wssd_out_file" % (TMPDIR, wildcards.sample)
-        shell("python3 merger.py {tempfile} --infiles {input.wssd} --wssd_merge")
+        shell("python3 merger.py {tempfile} --infiles {input.wssd} --wssd_merge --contigs_file {CONTIGS_FILE}")
         shell("rsync {tempfile} {output}")
 
 rule merge_sparse_matrices:
