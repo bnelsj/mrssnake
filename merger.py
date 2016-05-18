@@ -25,7 +25,7 @@ def merge_contigs_to_wssd(infile_list, fout_handle):
     print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
     for file in infile_list:
         with tables.open_file(file, mode="r") as h5_handle:
-            nodes = [node for node in h5_handle.list_nodes]
+            nodes = [node for node in h5_handle.list_nodes("/depthAndStarts_wssd")]
             if len(nodes) == 0:
                 print("Error: no contigs in infile: %s" % (file), file=sys.stderr)
                 sys.exit(1)
