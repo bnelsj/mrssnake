@@ -65,7 +65,11 @@ def merge_sparse_h5_to_wssd(infile_list, contig_list, fout_handle):
                   flush=True)
             with tables.open_file(h5file, mode="r") as fin:
                 in_group = fin.get_node(fin.root, "depthAndStarts_wssd")
-                contig_array += load_sparse_matrix(contig, in_group)
+                job_matrix = load_sparse_matrix(contig, in_group)
+                if contig_array is None:
+                    contig_array = job_matrix.toarray()
+                else:
+                    contig_array += load_sparse_matrix(contig, in_group)
 
         if contig_array is None:
             print("Contig %s not found in infiles" % contig)
@@ -130,6 +134,7 @@ if __name__ == "__main__":
     parser.add_argument("--contigs_file", default=None,
                         help="Tab-delimited table with contig names in the first column")
     parser.add_argument("--contig", default=None, help="Name of contig to merge")
+    parser.add_argument("--wssd_merge", action="store_true", help="Merge wssd contigs to wssd_out_file")
 
     args = parser.parse_args()
 
@@ -164,9 +169,13 @@ if __name__ == "__main__":
             print("No infiles found. Exiting...", file=sys.stderr)
             sys.exit(1)
 
-    # Merge hdf5 files into single wssd_out_file
-    with tables.open_file(args.outfile, mode="w") as fout:
-        merge_sparse_h5_to_wssd(infiles, contigs, fout)
+    if args.wssd_merge:
+        with tables.open_file(args.outfile, mode="w") as fout:
+            merge_contigs_to_wssd(infiles, fout)
+    else:
+        # Merge hdf5 files into single wssd_out_file
+        with tables.open_file(args.outfile, mode="w") as fout:
+            merge_sparse_h5_to_wssd(infiles, contigs, fout)
 
     finish_time = time.time()
     print("Finished writing wssd_out_file in %d seconds. Closing." %

@@ -25,14 +25,8 @@ if UNMAPPED_PARTITIONS == -1:
 MAX_BP = config["max_bp_in_mem"]
 
 TMPDIR = config["tmpdir"]
-LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
 REMOVE_BAMS = config["remove_bams"]
-
-if LIVE_MERGE:
-    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
-else:
-    ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -70,7 +64,7 @@ rule clean:
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
-           shelve = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.dat" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+           shelve = expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "mapping/{sample}/{sample}/wssd_out_file"
     params: sge_opts="-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/wssd_merge/{sample}.txt"
@@ -79,11 +73,11 @@ rule wssd_merge:
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     run:
         tempfile = "%s/%s.wssd_out_file" % (TMPDIR, wildcards.sample)
-        shell("python3 merger.py {tempfile} --wssd_merge {input.wssd}")
+        shell("python3 merger.py {tempfile} --infiles {input.wssd} --wssd_merge")
         shell("rsync {tempfile} {output}")
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext = ["dat"])
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
     params: sge_opts = "-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.{contig}.txt"
@@ -96,23 +90,9 @@ rule merge_sparse_matrices:
         shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig} --live_merge')
         shell("rsync {tempfile} {output}")
 
-rule merge_sparse_matrices_live:
-    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], chunker = "bin/bam_chunker_cascade", bam_check = "BAMS_READABLE", index_check = "MRSFASTULTRA_INDEXED"
-    output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
-    params: sge_opts = "-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00 -soft -l gpfsstate=0"
-    log: "log/merge/{sample}.txt"
-    resources: mem=8
-    benchmark: "benchmarks/merger/{sample}.txt"
-    priority: 10
-    run:
-        infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        tempfile = "%s/%s.wssd_out_file.%s" % (TMPDIR, wildcards.sample, wildcards.contig)
-        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig}')
-        shell("rsync {tempfile} {output}")
-
 rule map_and_count:
-    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade", readable = "BAMS_READABLE", mrsfast_indexed = "MRSFASTULTRA_INDEXED"
-    output: [temp("region_matrices/{sample}/{sample}.{part}_%d.%s") % (BAM_PARTITIONS, ext) for ext in ["dat", "bak", "dir"]]
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade"
+    output: "region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS)
     params: sge_opts = "-l mfree=10G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
@@ -120,7 +100,6 @@ rule map_and_count:
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
-        ofprefix = output[0].replace(".dat", "")
         fifo = "%s/mrsfast_fifo" % TMPDIR
         if TMPDIR != "":
             local_index = "%s/%s" % (TMPDIR, os.path.basename(input.index[0]))
@@ -137,7 +116,7 @@ rule map_and_count:
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
         shell("{input.chunker} -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
-            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args}"
+            "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {read_counter_args}"
             )
 
 rule check_bam_files:
