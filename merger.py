@@ -69,7 +69,9 @@ def merge_sparse_h5_to_wssd(infile_list, contig_list, fout_handle):
                 if contig_array is None:
                     contig_array = job_matrix.toarray()
                 else:
-                    contig_array += load_sparse_matrix(contig, in_group)
+                    contig_array += job_matrix
+
+            del job_matrix
 
         if contig_array is None:
             print("Contig %s not found in infiles" % contig)
