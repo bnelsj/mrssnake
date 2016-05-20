@@ -130,9 +130,6 @@ if __name__ == "__main__":
     parser.add_argument("--infiles", nargs="+", default=None,\
                         help="List of input hdf5 files to merge")
     parser.add_argument("--infile_glob", default=None, help="glob string for infiles")
-    parser.add_argument("--live_merge", action="store_true",
-                        help="Start merging infiles before they are all finished? \
-                              (Default: %(default)s)")
     parser.add_argument("--contigs_file", default=None,
                         help="Tab-delimited table with contig names in the first column")
     parser.add_argument("--contig", default=None, help="Name of contig to merge")

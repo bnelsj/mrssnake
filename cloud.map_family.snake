@@ -63,8 +63,6 @@ if SAMPLE is not None:
 
 SAMPLES.index = SAMPLES.sn
 
-print("Building DAG")
-
 def get_sparse_matrices_from_sample(wildcards):
     return ["%s/region_matrices/%s/%s.%d_%d" % (BUCKET, wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
@@ -82,7 +80,7 @@ rule merge_wssd:
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     priority: 30
     run:
-        shell('python3 merger.py {output} --infiles {input.wssd} --contigs_file {CONTIGS_FILE} &> {log}')
+        shell('python3 merger.py {output} --infiles {input.wssd} --contigs_file {CONTIGS_FILE} --wssd_merge > {log} 2>&1')
 
 rule merge_sparse_matrices:
     input: expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
@@ -94,7 +92,7 @@ rule merge_sparse_matrices:
     priority: 20
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} > {log} 2>&1')
+        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --contig {wildcards.contig} > {log} 2>&1')
 
 #rule merge_sparse_matrices_live:
 #    input: bam = "bam/{sample}.bam"
