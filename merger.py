@@ -44,10 +44,14 @@ def load_sparse_matrix(name, root):
         Adapted from:
         http://stackoverflow.com/questions/11129429/storing-numpy-sparse-matrix-in-hdf5-pytables
     """
-    pars = []
-    for par in ('data', 'indices', 'indptr', 'shape'):
-        pars.append(getattr(root, '%s_%s' % (name, par)).read())
-    mat = csr_matrix(tuple(pars[:3]), shape=pars[3])
+    try:
+        pars = []
+        for par in ('data', 'indices', 'indptr', 'shape'):
+            pars.append(getattr(root, '%s_%s' % (name, par)).read())
+        mat = csr_matrix(tuple(pars[:3]), shape=pars[3])
+    except tables.exceptions.NoSuchNodeError as e:
+        print("Error: name %s %s" % (name, str(e)), file=sys.stderr)
+        mat = None
     return mat
 
 def merge_sparse_h5_to_wssd(infile_list, contig_list, fout_handle):
@@ -66,6 +70,8 @@ def merge_sparse_h5_to_wssd(infile_list, contig_list, fout_handle):
             with tables.open_file(h5file, mode="r") as fin:
                 in_group = fin.get_node(fin.root, "depthAndStarts_wssd")
                 job_matrix = load_sparse_matrix(contig, in_group)
+                if job_matrix is None:
+                    continue
                 if contig_array is None:
                     contig_array = job_matrix.toarray()
                 else:
