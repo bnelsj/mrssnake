@@ -80,19 +80,19 @@ rule merge_wssd:
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     priority: 30
     run:
-        shell('python3 merger.py {output} --wssd_merge {input.wssd} &> {log}')
+        shell('python3 merger.py {output} --infiles {input.wssd} --contigs_file {CONTIGS_FILE} --wssd_merge > {log} 2>&1')
 
 rule merge_sparse_matrices:
-    input: expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.{ext}" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS), ext=["dat", "dir"])
+    input: expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
     output: "%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.{contig}.txt"
     resources: mem=8
     benchmark: "benchmarks/merger/{sample}.{contig}.txt"
-    priority: 10
+    priority: 20
     run:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} > {log} 2>&1')
+        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --contig {wildcards.contig} > {log} 2>&1')
 
 #rule merge_sparse_matrices_live:
 #    input: bam = "bam/{sample}.bam"
@@ -109,17 +109,16 @@ rule merge_sparse_matrices:
 rule map_and_count:
     input: bam = "bam/{sample}.bam",
            index = "bam/{sample}.bai"
-    output: ["%s/region_matrices/{sample}/{sample}.{part}_%d.%s" % (BUCKET, BAM_PARTITIONS, ext) for ext in ["dat", "dir"]]
+    output: "%s/region_matrices/{sample}/{sample}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS)
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
-    priority: 20
+    priority: 10
     resources: mem=4
     log: "%s/log/map/{sample}/{part}_%s.txt" % (WORKDIR, BAM_PARTITIONS)
     shadow: True
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
-        ofprefix = output[0].replace(".dat", "")
-        fifo = "mrsfast_fifo"
+        fifo = "mrsfast_fifo.%s.%s" %(wildcards.sample, str(wildcards.part))
         mrsfast_ref_path = MASKED_REF
 
         read_counter_args = "--max_basepairs_in_mem %d" % MAX_BP
@@ -127,15 +126,14 @@ rule map_and_count:
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS} >> {log}; mkfifo {fifo}; ")
         shell("bin/bam_chunker_cascade -b {input.bam} -i {input.index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> {log} | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e 2 --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> {log} 2>> {log} | "
-            "python3 read_counter.py {fifo} {ofprefix} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
+            "python3 read_counter.py {fifo} {output[0]} {CONTIGS_FILE} {read_counter_args} >> {log} 2>> {log}")
         shell("aws s3 cp {output[0]} s3://{output[0]}")
-        shell("aws s3 cp {output[1]} s3://{output[1]}")
         dynamo_table = conn.get_table("SimonsRDTracking")
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
         sample_item["finished_chunks"] += 1
         sample_item.put()
 
-rule download_sample:
+rule download_bam:
     output: "bam/{sample}.bam", "bam/{sample}.bai"
     run:
         bam = SAMPLES.loc[wildcards.sample, "bam"]

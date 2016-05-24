@@ -6,19 +6,19 @@ Uses sparse matrices to reduce memory footprint.
 from __future__ import print_function
 from __future__ import division
 
-from pickle import HIGHEST_PROTOCOL
-
-import shelve
-
 import sys
 import argparse
 
 from functools import total_ordering
 import time
 
+import tables
 import numpy as np
 
-from scipy.sparse import lil_matrix, bsr_matrix
+from scipy.sparse import csr_matrix
+from scipy.sparse import lil_matrix
+from tables import NoSuchNodeError
+
 import pysam
 
 @total_ordering
@@ -107,6 +107,55 @@ class ContigManager:
         self.used_bases = new_used_bases
         self.reset_read_counts()
 
+def write_to_h5(contig, array, fout_handle):
+    """Write counts (dictionary of contig matrices) to fout hdf5 file.
+       Outfile is in wssd_out_file format.
+    """
+    try:
+        group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
+    except NoSuchNodeError:
+        group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
+    finally:
+        nrows, ncols = array.shape
+        nedists = nrows // 2
+        wssd_contig = array.T
+
+        carray_empty = tables.CArray(group,
+                                     contig,
+                                     tables.UInt32Atom(),
+                                     (ncols, nedists, 2),
+                                     filters=tables.Filters(complevel=1, complib="lzo")
+                                    )
+
+        # Add depth counts
+        carray_empty[:, :, 0] = wssd_contig[:, nedists:]
+
+        # Add starts
+        carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
+
+        fout_handle.flush()
+
+def store_sparse_matrix(m, name, h5_handle, root="/depthAndStarts_wssd"):
+    """
+    Code to store a sparse csr_matrix as an hdf5 file.
+    Adapted from:
+    http://stackoverflow.com/questions/11129429/storing-numpy-sparse-matrix-in-hdf5-pytables
+    """
+    msg = "This code only works for csr matrices"
+    assert(m.__class__ == csr_matrix), msg
+
+    for par in ('data', 'indices', 'indptr', 'shape'):
+        full_name = '%s_%s' % (name, par)
+        try:
+            n = getattr(root, full_name)
+            n._f_remove()
+        except AttributeError:
+            pass
+
+        arr = np.array(getattr(m, par))
+        atom = tables.Atom.from_dtype(arr.dtype)
+        ds = h5_handle.createCArray(root, full_name, atom, arr.shape)
+        ds[:] = arr
 
 def get_array_contigs(contigs, args):
     """
@@ -368,19 +417,25 @@ if __name__ == "__main__":
     print("Counter: finished counting %d reads" % total_reads, file=logfile, flush=True)
 
     for contig, array in read_dict.items():
-        read_dict[contig] = bsr_matrix(array)
-        del array
+        if not isinstance(array, csr_matrix):
+            read_dict[contig] = csr_matrix(array)
+            del array
 
-    print("Counter: finished converting numpy arrays and lil matrices to bsr_matrix",
+    print("Counter: finished converting numpy arrays to lil matrices",
           file=logfile, flush=True)
+    print("Counter: started writing matrices to hdf5: %s" % args.outfile, file=logfile)
 
-    with shelve.open(args.outfile, protocol=HIGHEST_PROTOCOL) as outfile:
-        outfile.update(read_dict)
+    with tables.open_file(args.outfile, mode="w") as h5file:
+        out_group = h5file.create_group(h5file.root, "depthAndStarts_wssd") 
+        for i, (contig, array) in enumerate(read_dict.items()):
+            print("Counter: %d: Creating array for %s" % (i, contig), file=sys.stdout, flush=True)
+            store_sparse_matrix(array, contig, h5file)
+            del array
 
     run_end = time.time()
     total_runtime = run_end - run_start
 
-    print("Counter: finished pickling matrices: %s" % args.outfile, file=logfile)
+    print("Counter: finished writing matrices to hdf5: %s" % args.outfile, file=logfile)
     print("Counter: total runtime: %d" % total_runtime, file=logfile, flush=True)
     if logfile is not sys.stderr:
         logfile.close()

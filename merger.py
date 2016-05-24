@@ -1,183 +1,163 @@
 """
-This module contains functions for merging read count shelves into pytables wssd_out_files.
-Merging can be done per contig and before all shelves are created.
+This module contains functions for merging read count hdf5 files into wssd_out_files using pytables.
+Merging can be done per contig and before all files are created.
 """
 
 from __future__ import print_function
 from __future__ import division
 
-import shelve
-
 import time
-import os
 import sys
 import argparse
 import glob
 
-from dbm import error
-
 import tables
-from tables.exceptions import NoSuchNodeError
-import numpy as np
-from scipy.sparse import issparse
+#import numpy as np
+from scipy.sparse import csr_matrix
 
-def convert_matrix(matrix):
+def merge_contigs_to_wssd(infile_list, fout_handle):
     """
-    Convert matrix to np.ndarray if it is sparse.
+        Create a wssd_out_file by copying nodes from a list of single contig
+        wssd files.
     """
-    if issparse(matrix):
-        matrix = matrix.toarray()
-    if isinstance(matrix, np.ndarray):
-        return matrix
-    else:
-        print("Error: unrecognized data type for matrix: %s" %
-              (matrix.__class__.__name__),
-              file=sys.stderr, flush=True)
-        sys.exit(1)
-
-def add_contents_to_contig(dat, contig):
-    """Take a dictionary-like object of matrices, add matrices to contig dictionary.
-       Converts matrices to np.ndarray automatically.
-    """
-    contig_string = list(contig)[0]
-    if contig_string in dat:
-        matrix = convert_matrix(dat[contig_string])
-        if contig[contig_string] is None:
-            contig[contig_string] = matrix
-        else:
-            contig[contig_string] += matrix
-    return contig
-
-def load_matrices_per_contig_live(matrices, contig):
-    """Get counts from all matrices for a given contig dictionary as they are finished.
-    """
-    fileset = set(matrices)
-    total_infiles = len(fileset)
-    processed_infiles = set()
-    while len(fileset) > 0:
-        for infile in fileset:
-            # Check if infile exists and hasn't been modified in 5 minutes
-            # Adds .dat extension for shelve compatibility
-            if os.path.isfile(infile + ".dat") and \
-               time.time() - os.path.getmtime(infile + ".dat") > 300:
-                try:
-                    dat = shelve.open(infile, flag="r")
-                except error as err:
-                    print("Error: %s: %s" % (infile, str(err)), file=sys.stderr, flush=True)
-                    continue
-                else:
-                    contig = add_contents_to_contig(dat, contig)
-                    processed_infiles.add(infile)
-                    print("Loaded shelve %d of %d: %s" %
-                          (len(processed_infiles), total_infiles, infile),
-                          file=sys.stdout, flush=True)
-        fileset -= processed_infiles
-        print("Checked all infiles. Sleeping 30s...", file=sys.stderr, flush=True)
-        time.sleep(30)
-    return contig
-
-def load_matrices_per_contig(matrices, contig):
-    """Get counts from all matrices for a given contig dictionary.
-    """
-    contig_string = list(contig)[0]
-    for i, infile in enumerate(matrices):
-        print("Contig %s: loading shelve %d of %d: %s" %
-              (contig_string, i+1, len(matrices), infile),
-              file=sys.stdout, flush=True)
-        with shelve.open(infile, flag="r") as dat:
-            contig = add_contents_to_contig(dat, contig)
-    return contig
-
-def write_to_h5(counts, fout_handle):
-    """Write counts (dictionary of contig matrices) to fout hdf5 file.
-       Outfile is in wssd_out_file format.
-    """
-    try:
-        group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
-    except NoSuchNodeError:
-        group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
-    finally:
-        for i, (contig, matrix) in enumerate(counts.items()):
-            print("Merger: %d Creating array for %s" %(i+1, contig), file=sys.stdout, flush=True)
-            nrows, ncols = matrix.shape
-            nedists = nrows // 2
-            wssd_contig = matrix.T
-
-            carray_empty = tables.CArray(group,
-                                         contig,
-                                         tables.UInt32Atom(),
-                                         (ncols, nedists, 2),
-                                         filters=tables.Filters(complevel=1, complib="lzo")
-                                        )
-
-            # Add depth counts
-            carray_empty[:, :, 0] = wssd_contig[:, nedists:]
-
-            # Add starts
-            carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
-
+    group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
+    dest_contigs = []
+    print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+    for file in infile_list:
+        with tables.open_file(file, mode="r") as h5_handle:
+            nodes = [node for node in h5_handle.list_nodes("/depthAndStarts_wssd")]
+            if len(nodes) == 0:
+                print("Error: no contigs in infile: %s" % (file), file=sys.stderr)
+                sys.exit(1)
+            if len(nodes) > 1:
+                print("Error: more than one contig (%d contigs) in infile: %s" % (len(nodes), file), file=sys.stderr)
+                sys.exit(1)
+            contig = nodes[0]
+            if contig.name in dest_contigs:
+                print("Error: contig %s in multiple infiles including: %s" % (contig.name, file), file=sys.stderr)
+                sys.exit(1)
+            h5_handle.copy_node(contig, newparent=group)
             fout_handle.flush()
 
-def write_wssd_to_h5(wssd_handle, fout_handle):
-    """Append single contig wssd_out_file to fout hdf5 file.
-       Outfile is in wssd_out_file format.
-       Exits with error if multiple contigs are in a single wssd file.
+def load_sparse_matrix(name, root):
+    """
+        Adapted from:
+        http://stackoverflow.com/questions/11129429/storing-numpy-sparse-matrix-in-hdf5-pytables
     """
     try:
-        group = fout_handle.get_node(fout_handle.root, "depthAndStarts_wssd")
-    except NoSuchNodeError:
-        group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
-    finally:
-        nodes = wssd_handle.list_nodes("/depthAndStarts_wssd/")
-        if len(nodes) > 0:
-            for matrix in nodes:
-                wssd_handle.copy_node(matrix, newparent=group)
-                fout_handle.flush()
+        pars = []
+        for par in ('data', 'indices', 'indptr', 'shape'):
+            pars.append(getattr(root, '%s_%s' % (name, par)).read())
+        mat = csr_matrix(tuple(pars[:3]), shape=pars[3])
+    except tables.exceptions.NoSuchNodeError as e:
+        print("Error: name %s %s" % (name, str(e)), file=sys.stderr)
+        mat = None
+    return mat
+
+def merge_sparse_h5_to_wssd(infile_list, contig_list, fout_handle):
+    """
+        Create a wssd_out_file with depth and counts for each contig in contig list
+        for each infile in infile_list. Assumes the h5 files contain sparse csr_matrices.
+    """
+
+    out_group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
+    for contig in contig_list:
+        contig_array = None
+        for h5file in infile_list:
+            print("Reading contig %s from h5file: %s" % (contig, h5file),
+                  file=sys.stdout,
+                  flush=True)
+            with tables.open_file(h5file, mode="r") as fin:
+                in_group = fin.get_node(fin.root, "depthAndStarts_wssd")
+                job_matrix = load_sparse_matrix(contig, in_group)
+                if job_matrix is None:
+                    continue
+                if contig_array is None:
+                    contig_array = job_matrix.toarray()
+                else:
+                    contig_array += job_matrix
+
+            del job_matrix
+
+        if contig_array is None:
+            print("Contig %s not found in infiles" % contig)
+        print("Writing contig %s to h5file" % (contig))
+        nrows, ncols = contig_array.shape
+        nedists = nrows // 2
+        wssd_contig = contig_array.T
+        carray_empty = tables.CArray(out_group,
+                                     contig,
+                                     tables.UInt32Atom(),
+                                     (ncols, nedists, 2),
+                                     filters=tables.Filters(complevel=1, complib="lzo")
+                                    )
+
+        # Add depth counts
+        carray_empty[:, :, 0] = wssd_contig[:, nedists:]
+        # Add starts
+        carray_empty[:, :, 1] = wssd_contig[:, 0:nedists]
+
+        fout_handle.flush()                              
+        del carray_empty
+        del wssd_contig
+        del contig_array
+
+def merge_h5_to_wssd(infile_list, contig_list, fout_handle):
+    """
+        Create a wssd_out_file with depth and counts for each contig in contig list
+        for each infile in infile_list.
+    """
+    group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
+    print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
+    for contig in contig_list:
+        contig_array = None
+        for h5file in infile_list:
+            print("Reading contig %s from h5file: %s" % (contig, h5file),
+                  file=sys.stdout,
+                  flush=True)
+            with tables.open_file(h5file, mode="r") as h5_handle:
+                source_nodes = [node.name for node in h5_handle.list_nodes("/depthAndStarts_wssd")]
+                if contig in source_nodes:
+                    if contig_array is None:
+                        contig_array = h5_handle.get_node("/depthAndStarts_wssd", name=contig)[:]
+                    else:
+                        contig_array += h5_handle.get_node("/depthAndStarts_wssd", name=contig)[:]
+
+        if contig_array is not None:
+            carray = fout_handle.create_carray(group, contig, obj=contig_array,
+                                               filters=tables.Filters(complevel=1, complib="lzo"))
+            fout_handle.flush()
         else:
-            print("Empty wssd file", file=sys.stderr)
+            print("Contig %s not found in infiles" % contig)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("outfile", help="Path to output wssd_out_file")
-    parser.add_argument("--infiles", nargs="+", default=None, help="List of input shelves to merge")
+    parser.add_argument("--infiles", nargs="+", default=None,\
+                        help="List of input hdf5 files to merge")
     parser.add_argument("--infile_glob", default=None, help="glob string for infiles")
-    parser.add_argument("--live_merge", action="store_true",
-                        help="Start merging infiles before they are all finished? \
-                              (Default: %(default)s)")
     parser.add_argument("--contigs_file", default=None,
                         help="Tab-delimited table with contig names in the first column")
     parser.add_argument("--contig", default=None, help="Name of contig to merge")
-    parser.add_argument("--wssd_merge", nargs="+", default=None,
-                        help="Merge multiple wssd_out_files")
+    parser.add_argument("--wssd_merge", action="store_true", help="Merge wssd contigs to wssd_out_file")
 
     args = parser.parse_args()
 
     contig_dict = {}
-    contig_list = []
+    contigs = []
 
-    if not args.wssd_merge:
-        if args.contigs_file is None and args.contig is None:
-            print("Error: Must specify --contigs_file or --contig for shelve merge",
-                  file=sys.stderr)
-            sys.exit(1)
-        else:
-            if args.contig is not None:
-                contig_list.append(args.contig)
-            if args.contigs_file is not None:
-                with open(args.contigs_file, "r") as contigs_file:
-                    for line in contigs_file:
-                        contig_name = line.rstrip().split()[0]
-                        contig_list.append(contig_name)
-    else:
-        if args.infile_glob is not None or args.infiles is not None:
-            print("Error: cannot specify infile_glob or infiles with wssd_merge", file=sys.stderr)
-            sys.exit(1)
-
-
-    if args.live_merge:
-        load_func = load_matrices_per_contig_live
-    else:
-        load_func = load_matrices_per_contig_live
+    if args.contigs_file is None and args.contig is None:
+        print("Error: Must specify --contigs_file or --contig for merge",
+              file=sys.stderr)
+        sys.exit(1)
+    
+    if args.contig is not None:
+        contigs.append(args.contig)
+    if args.contigs_file is not None:
+        with open(args.contigs_file, "r") as contigs_file:
+            for line in contigs_file:
+                contig_name = line.rstrip().split()[0]
+                contigs.append(contig_name)
 
     start_time = time.time()
 
@@ -189,32 +169,18 @@ if __name__ == "__main__":
     if args.infiles is not None:
         infiles.extend(args.infiles)
 
-    # Remove extensions and get unique shelves
-    if infiles != []:
-        infiles = [x.replace(".dat", "").replace(".bak", "").replace(".dir", "") for x in infiles]
-        infiles = list(set(infiles))
-
     if args.infile_glob is not None or args.infiles is not None:
         if infiles == []:
             print("No infiles found. Exiting...", file=sys.stderr)
             sys.exit(1)
 
-    if args.wssd_merge is None:
+    if args.wssd_merge:
         with tables.open_file(args.outfile, mode="w") as fout:
-            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
-            for contig_name in contig_list:
-                contig_dict = {contig_name: None}
-                contig_dict = load_func(infiles, contig_dict)
-                write_to_h5(contig_dict, fout)
-
+            merge_contigs_to_wssd(infiles, fout)
     else:
-        # Merge wssd files into single wssd_out_file
+        # Merge hdf5 files into single wssd_out_file
         with tables.open_file(args.outfile, mode="w") as fout:
-            print("Successfully opened outfile: %s" % args.outfile, file=sys.stdout, flush=True)
-            for wssd_file in args.wssd_merge:
-                print("Reading wssd_file: %s" % wssd_file, file=sys.stdout, flush=True)
-                with tables.open_file(wssd_file, mode="r") as wssd:
-                    write_wssd_to_h5(wssd, fout)
+            merge_sparse_h5_to_wssd(infiles, contigs, fout)
 
     finish_time = time.time()
     print("Finished writing wssd_out_file in %d seconds. Closing." %
