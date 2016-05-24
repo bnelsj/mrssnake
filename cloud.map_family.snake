@@ -1,7 +1,10 @@
 import os
 import sys
+import datetime
+
 import pysam
 from subprocess import CalledProcessError
+from subprocess import check_output
 
 import pandas as pd
 
@@ -13,6 +16,8 @@ conn = boto.dynamodb.connect_to_region("us-east-1",
                                        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
                                        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
 S3 = S3RemoteProvider(access_key_id=os.environ["AWS_ACCESS_KEY_ID"], secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"])
+
+INSTANCE_IP = check_output(["curl", "http://169.254.169.254/latest/meta-data/public-ipv4"]).decode("UTF-8")
 
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
 WORKDIR = config.get("workdir", SNAKEMAKE_DIR)
@@ -37,13 +42,6 @@ BUCKET = config["bucket"]
 TMPDIR = config["tmpdir"]
 LIVE_MERGE = config["live_merge"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
-
-#if LIVE_MERGE:
-#    ruleorder: merge_sparse_matrices_live > merge_sparse_matrices
-#    ruleorder: merge_wssd > merge_sparse_matrices
-#else:
-#    ruleorder: merge_sparse_matrices > merge_sparse_matrices_live
-#    ruleorder: merge_sparse_matrices > merge_wssd
 
 if not os.path.exists("log"):
     os.makedirs("log")
@@ -81,10 +79,15 @@ rule merge_wssd:
     priority: 30
     run:
         shell('python3 merger.py {output} --infiles {input.wssd} --contigs_file {CONTIGS_FILE} --wssd_merge > {log} 2>&1')
+        shell("aws s3 cp {output} s3://{output}")
+        dynamo_table = conn.get_table("SimonsRDTracking")
+        sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
+        sample_item["pytables_finished"] = 1
+        sample_item.put()
 
 rule merge_sparse_matrices:
     input: expand("%s/region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS), part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
-    output: "%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET
+    output: temp("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET)
     params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=8:00:00"
     log: "log/merge/{sample}.{contig}.txt"
     resources: mem=8
@@ -94,22 +97,10 @@ rule merge_sparse_matrices:
         infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
         shell('python3 merger.py {output} --infile_glob "{infile_glob}" --contig {wildcards.contig} > {log} 2>&1')
 
-#rule merge_sparse_matrices_live:
-#    input: bam = "bam/{sample}.bam"
-#    output: S3.remote("%s/mapping/{sample}/{sample}/wssd_out_file.{contig}" % BUCKET, keep_local=True)
-#    params: sge_opts = "-l mfree=8G -l data_scratch_ssd_disk_free=10G -pe serial 1 -N merge_sample -l h_rt=48:00:00"
-#    log: "log/merge/{sample}.{contig}.txt"
-#    resources: mem=8
-#    benchmark: "benchmarks/merger/{sample}.{contig}.txt"
-#    priority: 10
-#    run:
-#        infile_glob = os.path.commonprefix(get_sparse_matrices_from_sample(wildcards)) + "*"
-#        shell('python3 merger.py {output} --infile_glob "{infile_glob}" --live_merge --contig {wildcards.contig} &> {log}')
-
 rule map_and_count:
     input: bam = "bam/{sample}.bam",
            index = "bam/{sample}.bai"
-    output: "%s/region_matrices/{sample}/{sample}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS)
+    output: temp("%s/region_matrices/{sample}/{sample}.{part}_%d.h5" % (BUCKET, BAM_PARTITIONS))
     params: sge_opts = "-l mfree=5G -N map_count -l h_rt=5:00:00"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 10
@@ -130,13 +121,18 @@ rule map_and_count:
         shell("aws s3 cp {output[0]} s3://{output[0]}")
         dynamo_table = conn.get_table("SimonsRDTracking")
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
-        sample_item["finished_chunks"] += 1
+        sample_item["pytables_finished_chunks"] += 1
         sample_item.put()
 
 rule download_bam:
-    output: "bam/{sample}.bam", "bam/{sample}.bai"
+    output: temp("bam/{sample}.bam"), temp("bam/{sample}.bai")
     run:
         bam = SAMPLES.loc[wildcards.sample, "bam"]
         index = SAMPLES.loc[wildcards.sample, "index"]
         shell("aws s3 cp s3://{index} {output[1]}")
         shell("aws s3 cp s3://{bam} {output[0]}")
+        dynamo_table = conn.get_table("SimonsRDTracking")
+        sample_item = dynamo_table.get_item(hash_key = wildcards.sample)
+        sample_item["instanceIP"] = INSTANCE_IP
+        sample_item["last_download"] = datetime.datetime.now().strftime("%c")
+        sample_item.put()
