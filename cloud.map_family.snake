@@ -123,7 +123,7 @@ rule map_and_count:
         sample_item = dynamo_table.get_item(hash_key = wildcards.sample, consistent_read=True)
         if "pytables_finished_chunks" not in sample_item:
             sample_item["pytables_finished_chunks"] = 0
-	sample_item["pytables_finished_chunks"] += 1
+        sample_item["pytables_finished_chunks"] += 1
         sample_item.put()
 
 rule download_bam:
