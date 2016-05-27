@@ -26,7 +26,6 @@ MAX_BP = config["max_bp_in_mem"]
 
 TMPDIR = config["tmpdir"]
 CLEAN_TEMP_FILES = config["clean_temp_files"]
-REMOVE_BAMS = config["remove_bams"]
 
 if not os.path.exists("log"):
     os.makedirs("log")
