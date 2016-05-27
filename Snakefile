@@ -60,7 +60,7 @@ rule clean:
             os.remove(bam)
             os.remove(bai)
         if CLEAN_TEMP_FILES:
-            shell("rm region_matrices/{sample}/*")
+            shell("rm region_matrices/{wildcards.sample}/*")
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
@@ -87,7 +87,7 @@ rule merge_sparse_matrices:
     run:
         infile_glob = os.path.commonprefix(input) + "*"
         tempfile = "%s/%s.wssd_out_file.%s" % (TMPDIR, wildcards.sample, wildcards.contig)
-        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig} --live_merge')
+        shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
 
 rule map_and_count:
