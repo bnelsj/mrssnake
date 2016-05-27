@@ -93,10 +93,10 @@ rule merge_sparse_matrices:
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade"
     output: "region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS)
-    params: sge_opts = "-l mfree=10G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
+    params: sge_opts = "-l mfree=6G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=10
+    resources: mem=6
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
@@ -122,7 +122,7 @@ rule map_and_count:
 rule check_bam_files:
     input: [bam for bam in SAMPLES.bam]
     output: touch("BAMS_READABLE")
-    params: sge_opts = ""
+    params: sge_opts = "-l h_rt=1:0:0"
     priority: 50
     run:
         for bamfile in input:
@@ -132,20 +132,10 @@ rule check_bam_files:
                 print("Error: could not open %s as bam.\n%s\n" % (bamfile, str(e)), file = sys.stderr)
                 sys.exit(1)
 
-rule get_headers:
-    input: expand("bam_headers/{sample}.txt", sample = SAMPLES.sn)
-
-rule get_header:
-    input: lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"]
-    output: "bam_headers/{sample}.txt"
-    params: sge_opts = ""
-    shell:
-        "samtools view -H {input} > {output}"
-
 rule check_index:
     input: MASKED_REF
     output: touch("MRSFASTULTRA_INDEXED"), temp(".mrsfast_index_test_output.txt")
-    params: sge_opts = ""
+    params: sge_opts = "-l h_rt=1:0:0"
     run:
         try:
             shell("mrsfast --search {input[0]} --seq dummy.fq > {output[1]}")
@@ -155,6 +145,6 @@ rule check_index:
 rule make_chunker:
     input: "src/chunker_cascade.cpp", "Makefile"
     output: "bin/bam_chunker_cascade"
-    params: sge_opts = ""
+    params: sge_opts = "-l h_rt=1:0:0"
     shell:
         "make"
