@@ -53,11 +53,6 @@ rule clean:
     output: touch("finished/{sample}.txt")
     priority: 50
     run:
-        if REMOVE_BAMS:
-            bam = SAMPLES.loc[wildcards.sample, "bam"]
-            bai = SAMPLES.loc[wildcards.sample, "index"]
-            os.remove(bam)
-            os.remove(bai)
         if CLEAN_TEMP_FILES:
             shell("rm region_matrices/{wildcards.sample}/*")
 
