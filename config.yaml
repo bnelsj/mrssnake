@@ -15,15 +15,19 @@ custom_contig:
     masked_ref: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/mask/fastas/FAM115C_LOC154761_final/FAM115C_LOC154761_final.rp.trf.mask.fasta
     contigs: /net/eichler/vol23/projects/human_diversity/nobackups/bnelsj/hsdg/FAM115C/rd_custom_contig_hgdp/FAM115C_LOC154761_final_lengths.tab
 
-bam_partitions: 500
+# Number of partitions for mapped reads. 500 works well for ~30-40X coverage on human genomes
+bam_partitions: 500 
 # Number of unmapped partitions. If set to -1, use bam_partitions / 100
-unmapped_partitions: -1
+unmapped_partitions: -1 
 
-# Maximum bp to store in numpy arrays. The rest will be in scipy sparse lil matrices
+# Maximum allowed edit distance for mrsfastULTRA.
+max_edist: 2
+
+# Maximum bp to store in numpy arrays. The rest will be in scipy sparse lil matrices. 
+# Increase it to use more memory and decrease runtime. 
+# Decrease it to use less memory and increase runtime.
 max_bp_in_mem: 300000000
 
 # Set amazon to True if running on an EC2 instance
 tmpdir: $TMPDIR
 clean_temp_files: False
-
-njobs: 100
