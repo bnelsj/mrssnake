@@ -3,7 +3,10 @@
 #           bnelsj@uw.edu         #
 ###################################
 
-CXX=g++ -lstdc++
+CXX=g++ -lstdc++ -fopenmp -lz -lm
+
+bam_chunker_parallel: bin libhts.a
+	cd bin && $(CXX) -O3 -I ../htslib/ -L ../htslib -lz ../src/chunker_parallel.cpp ../htslib/libhts.a -lpthread -o bam_chunker_parallel
 
 bam_chunker_cascade: bin libhts.a
 	cd bin && $(CXX) -O3 -I ../htslib/ -L ../htslib -lz ../src/chunker_cascade.cpp ../htslib/libhts.a -lpthread -o bam_chunker_cascade
