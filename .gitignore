@@ -3,6 +3,7 @@ log/
 .snakemake/
 benchmarks/
 __pycache__/
+*~
 *.pkl
 *.sam
 *.fa
