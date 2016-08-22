@@ -1,0 +1,102 @@
+import os
+import sys
+import pysam
+from subprocess import CalledProcessError
+
+import pandas as pd
+
+SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+
+shell.executable("/bin/bash")
+shell.prefix("source %s/config.sh; set -euo pipefail; " % SNAKEMAKE_DIR)
+
+configfile: "%s/config.yaml" % SNAKEMAKE_DIR
+
+MANIFEST = config["manifest"]
+REFERENCE = config["reference"]
+MASKED_REF = config[REFERENCE]["masked_ref"]
+CONTIGS_FILE = config[REFERENCE]["contigs"]
+
+MAX_EDIST = config["max_edist"]
+
+CLEAN_TEMP_FILES = config["clean_temp_files"]
+
+if not os.path.exists("log"):
+    os.makedirs("log")
+
+CONTIGS = {}
+
+with open(CONTIGS_FILE, "r") as reader:
+    for line in reader:
+        contig, size = line.rstrip().split()
+        CONTIGS[contig] = int(size)
+
+SAMPLES = pd.read_table(MANIFEST)
+SAMPLES.index = SAMPLES.sn
+
+def get_sparse_matrices_from_sample(wildcards):
+    return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
+
+localrules: all, get_headers, make_jobfile, clean
+
+rule all:
+    input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
+
+rule clean:
+    input: "%s/mapping/{sample}/{sample}/wssd_out_file" % SNAKEMAKE_DIR
+    output: touch("finished/{sample}.txt")
+    priority: 50
+    run:
+        if CLEAN_TEMP_FILES:
+            shell("rm region_matrices/{wildcards.sample}/*")
+
+rule wssd_merge:
+    input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys())
+    output: "{SNAKEMAKE_DIR}/mapping/{sample}/{sample}/wssd_out_file"
+    params: sge_opts="-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00 -soft -l gpfsstate=0"
+    log: "log/wssd_merge/{sample}.txt"
+    resources: mem=8
+    priority: 40
+    benchmark: "benchmarks/wssd_merge/{sample}.txt"
+    run:
+        tempfile = "%s.wssd_out_file" % (wildcards.sample)
+        shell("python3 {SNAKEMAKE_DIR}/merger.py {tempfile} --infiles {input.wssd} --wssd_merge --contigs_file {CONTIGS_FILE}")
+        shell("rsync {tempfile} {output}")
+
+rule count:
+    input: "{sample}.mrsfast.sam"
+    output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
+    resources: cores=1, mem=6
+    benchmark: "benchmarks/count/{sample}.{contig}.txt"
+    shell:
+        "python3 {SNAKEMAKE_DIR}/read_counter_from_sam.py {input} {output} {wildcards.contig} {CONTIGS_FILE}"
+
+rule map:
+    input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai"
+    output: "{sample}.mrsfast.sam"
+    params: sge_opts = ""
+    benchmark: "%s/benchmarks/counter/{sample}/{sample}.txt" % SNAKEMAKE_DIR
+    priority: 20
+    log: "%s/log/map/{sample}.map.txt" % SNAKEMAKE_DIR
+    run:
+        MEM = float(config["mem"].rstrip("GgMm"))
+        MRSFAST_MEM = config["mem"] * 0.7 # Rough correction for mrsfast mem overuse
+        masked_ref_name = os.path.basename(MASKED_REF)
+        mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
+        shell("{SNAKEMAKE_DIR}/bin/bam_chunker_parallel -b {input.bam} -i {input.index} -t {CORES} 2>> /dev/stderr | \
+              mrsfast --search {mrsfast_ref_path} -n 0 -e {MAX_EDIST} --crop 36 --seq /dev/stdin \
+              -o {output[0]} --disable-nohit --threads {CORES} --mem {MRSFAST_MEM}")
+
+rule rsync:
+    input: lambda wildcards: SAMPLES.loc[SAMPLES.sn == wildcards.sample, "bam"],
+           lambda wildcards: SAMPLES.loc[SAMPLES.sn == wildcards.sample, "index"]
+    output: temp("bam/{sample}.bam"),
+            temp("bam/{sample}.bai")
+    resources: cores=1
+    priority: 10
+    run:
+        bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"].values[0]
+        bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"].values[0]
+        shell("rsync {input[1]} {output[1]} --bwlimit=100000")
+        shell("rsync {input[0]} {output[0]} --bwlimit=100000")
+        shell("mkdir -p /var/tmp/mrsfast_index; rsync {MASKED_REF}.index /var/tmp/mrsfast_index/ --copy-links -p --bwlimit=10000") 
