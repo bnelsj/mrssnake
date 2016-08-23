@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from tables import NoSuchNodeError
 
-def create_array(contig, contigs_file, max_edist):
+def create_array(contigs, contigs_file, max_edist):
     """Create global numpy array 'matrix' for given contig.
     shape = (contig length, nedists, 2)
     third dimension is for depth and starts, respectively.
@@ -31,21 +31,25 @@ def create_array(contig, contigs_file, max_edist):
     contig_dat = pd.read_table(contigs_file, header=None, names=["contig", "length"])
     contig_dat.index = contig_dat.contig
 
-    contig_length = contig_dat.ix[contig_dat.contig == contig, "length"]
-    global matrix
-    matrix = np.ndarray((contig_length, max_edist+1, 2), dtype=np.uint32)
+    global matrix_dict
+    matrix_dict = {}
 
-def add_to_array(pos, edist, rlen=36):
+    for contig in contigs:
+        contig_length = contig_dat.ix[contig_dat.contig == contig, "length"]
+        matrix_dict[contig] = np.ndarray((contig_length, max_edist+1, 2), dtype=np.uint32)
+
+def add_to_array(array, pos, edist, rlen=36):
     """Add read entry to contig. Assumes pos is 0-based.
     """
 
     end = pos + rlen
-    matrix[pos:end, edist, 0] += 1
-    matrix[pos, edist, 1] += 1
+    array[pos:end, edist, 0] += 1
+    array[pos, edist, 1] += 1
 
-def process_samfile(samfile, contig, max_edist, rlen=36):
-    regex_full = re.compile("[^ @\t]+\t[0-9]+\t(%s)\t([0-9]+)\t.+NM:i:([0-9]+)" % contig)
-    nhits = 0
+def process_samfile(samfile, contigs, max_edist, rlen=36):
+    contigs_string = "|".join(contigs)
+    regex_full = re.compile("[^ @\t]+\t[0-9]+\t(%s)\t([0-9]+)\t.+NM:i:([0-9]+)" % contigs_string)
+    nhits = {contig: 0 for contig in contigs}
 
     with open(samfile, "r") as sam:
         for line in sam:
@@ -54,8 +58,8 @@ def process_samfile(samfile, contig, max_edist, rlen=36):
                 contig, pos, edist = match.group(1,2,3)
                 pos = int(pos) - 1 # Convert 1-based pos to 0-based
                 edist = int(edist) 
-                add_to_array(pos, edist, rlen=36)
-                nhits += 1
+                add_to_array(matrix_dict[contig], pos, edist, rlen=36)
+                nhits[contig] += 1
 
     return nhits
 
@@ -71,11 +75,11 @@ def write_to_h5(contig, fout_handle, chunksize=1000000):
         carray_empty = tables.CArray(group,
                                      contig,
                                      tables.UInt32Atom(),
-                                     matrix.shape,
+                                     matrix[contig].shape,
                                      filters=tables.Filters(complevel=1, complib="lzo")
                                     )
 
-        contig_len = matrix.shape[0]
+        contig_len = matrix[contig].shape[0]
         nchunks = contig_len // chunksize
         if nchunks * chunksize < contig_len:
             nchunks += 1
@@ -85,7 +89,7 @@ def write_to_h5(contig, fout_handle, chunksize=1000000):
             e = s + chunksize
             if e > contig_len:
                 e = contig_len
-            carray_empty[s:e, :, :] = matrix[s:e, :, :]
+            carray_empty[s:e, :, :] = matrix[contig][s:e, :, :]
 
         fout_handle.flush()
 
@@ -93,14 +97,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("samfile", help="Sam-format input file")
     parser.add_argument("outfile", help="HDF5 file with read depths and starts")
-    parser.add_argument("contig", help="Name of contig")
-    parser.add_argument("contig_lengths", help="tab-delimited file with contig names and lengths")
+    parser.add_argument("contigs", nargs="+", help="Names of contigs")
+    parser.add_argument("--contigs_file", required=True,
+                        help="tab-delimited file with contig names and lengths")
     parser.add_argument("--max_edist",
                         default=2,
                         type=int,
-                        help="Maximum edit distance of input reads"
+                        help="Maximum edit distance of input reads (default: %(default)s)"
                        )
-    parser.add_argument("--read_length", default=36, type=int, help="Length of input reads")
+    parser.add_argument("--read_length", default=36, type=int,
+                        help="Length of input reads (default: %(default)s)")
     parser.add_argument("--log", default=sys.stderr, help="Path to log file. Default: sys.stderr")
 
     args = parser.parse_args()
@@ -112,19 +118,21 @@ if __name__ == "__main__":
     else:
         logfile = sys.stderr
 
-    create_array(args.contig, args.contig_lengths, args.max_edist)
+    create_array(args.contigs, args.contigs_file, args.max_edist)
 
-    nhits = process_samfile(args.samfile, args.contig, args.max_edist)
+    nhits = process_samfile(args.samfile, args.contigs, args.max_edist)
 
     mp_end = time.time() - run_start
 
     print("Finished reading samfile in %d seconds." % mp_end, file=logfile)
-    print("Contig %s had %d hits" % (args.contig, nhits), file=logfile)
+    for contig in args.contigs:
+        print("Contig %s had %d hits" % (contig, nhits[contig]), file=logfile)
     print("Writing to hdf5: %s" % args.outfile, file=logfile)
     
     with tables.open_file(args.outfile, mode="w") as h5file:
-        write_to_h5(args.contig, h5file)
-        del matrix
+        for contig in args.contigs:
+            write_to_h5(args.contig, h5file)
+            del matrix[contig]
 
     run_end = time.time()
     total_runtime = run_end - run_start
