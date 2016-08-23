@@ -52,7 +52,8 @@ def process_samfile(samfile, contig, max_edist, rlen=36):
             match = regex_full.match(line)
             if match is not None:
                 contig, pos, edist = match.group(1,2,3)
-                pos, edist = int(pos), int(edist)
+                pos = int(pos) - 1 # Convert 1-based pos to 0-based
+                edist = int(edist) 
                 add_to_array(pos, edist, rlen=36)
                 nhits += 1
 
