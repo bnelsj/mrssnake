@@ -5,6 +5,7 @@ benchmarks/
 __pycache__/
 *~
 *.pkl
+*.pyc
 *.sam
 *.fa
 *.fasta
