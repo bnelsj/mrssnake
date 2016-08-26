@@ -40,18 +40,10 @@ SAMPLES.index = SAMPLES.sn
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
-localrules: all, get_headers, make_jobfile, clean
+localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
-
-rule clean:
-    input: "%s/mapping/{sample}/{sample}/wssd_out_file" % SNAKEMAKE_DIR
-    output: touch("finished/{sample}.txt")
-    priority: 50
-    run:
-        if CLEAN_TEMP_FILES:
-            shell("rm region_matrices/{wildcards.sample}/*")
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % SNAKEMAKE_DIR, sample = SAMPLES.sn)
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys())
