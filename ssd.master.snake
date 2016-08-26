@@ -1,0 +1,71 @@
+"""
+This Snakefile rsyncs a bam to local SSD
+and maps the genome by calling ssd.mapper.snake
+"""
+
+import os
+import sys
+import pysam
+from subprocess import CalledProcessError
+from subprocess import check_output
+import pandas as pd
+
+SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
+print(SNAKEMAKE_DIR)
+shell.executable("/bin/bash")
+shell.prefix("set -euo pipefail; ")
+
+if config == {}:
+    configfile: "%s/config.yaml" % SNAKEMAKE_DIR
+
+MANIFEST = config["manifest"]
+REFERENCE = config["reference"]
+MASKED_REF = config[REFERENCE]["masked_ref"]
+CONTIGS_FILE = config[REFERENCE]["contigs"]
+
+CLEAN_TEMP_FILES = config["clean_temp_files"]
+
+if not os.path.exists("log"):
+    os.makedirs("log")
+
+CONTIGS = {}
+
+with open(CONTIGS_FILE, "r") as reader:
+    for line in reader:
+        contig, size = line.rstrip().split()
+        CONTIGS[contig] = int(size)
+
+SAMPLES = pd.read_table(MANIFEST)
+SAMPLES.index = SAMPLES.sn
+
+localrules: all
+
+rule all:
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
+
+rule map_sample:
+    input: bam = lambda wc: SAMPLES.ix[SAMPLES.sn == wc.sample, "bam"], index = lambda wc: SAMPLES.ix[SAMPLES.sn == wc.sample, "index"]
+    output: "mapping/{sample}/{sample}/wssd_out_file"
+    params: sge_opts = "-pe orte 24-36 -l testing=TRUE -l mfree=6G -l h_rt=12:0:0 -l data_scratch_ssd_disk_free=400G"
+    benchmark: "benchmarks/wssd_out/{sample}.txt"
+    run:
+        import getpass
+        cores = os.environ["NSLOTS"]
+        mem = os.environ["SGE_HGR_m_mem_free"]
+        #try:
+        #    TEMPDIR = os.environ["TMPDIR"]
+        #except KeyError:
+        TEMPDIR = "/data/scratch/ssd/%s" % getpass.getuser()
+        if not os.path.exists(TEMPDIR):
+            os.makedirs(TEMPDIR)
+        cwd = os.getcwd()
+        os.chdir(TEMPDIR)
+        print("Got {} slots and {} mem on {}".format(cores, mem, os.environ["HOSTNAME"]), flush=True)
+        snakemake_cmd = "snakemake -s {0}/ssd.mapper.snake --config sample={1} \
+                         mem={2} cores={3} -j {3} -w 30 -T".format(SNAKEMAKE_DIR,
+                                                                             wildcards.sample,
+                                                                             mem,
+                                                                             cores)
+        print(snakemake_cmd, flush=True)
+        shell(snakemake_cmd)
+        os.chdir(cwd)
