@@ -22,6 +22,8 @@ import numpy as np
 import pandas as pd
 from tables import NoSuchNodeError
 
+import create_depth_array
+
 def create_array(contigs, contigs_file, max_edist):
     """Create global numpy array 'matrix' for given contig.
     shape = (contig length, nedists, 2)
@@ -36,15 +38,14 @@ def create_array(contigs, contigs_file, max_edist):
 
     for contig in contigs:
         contig_length = contig_dat.ix[contig_dat.contig == contig, "length"]
-        matrix_dict[contig] = np.ndarray((contig_length, max_edist+1, 2), dtype=np.uint32)
+        matrix_dict[contig] = np.ndarray((contig_length, max_edist+1), dtype=np.uint32)
 
 def add_to_array(array, pos, edist, rlen=36):
     """Add read entry to contig. Assumes pos is 0-based.
     """
 
     end = pos + rlen
-    array[pos:end, edist, 0] += 1
-    array[pos, edist, 1] += 1
+    array[pos, edist] += 1
 
 def process_samfile(samfile, contigs, max_edist, rlen=36):
     contigs_string = "|".join(contigs)
@@ -63,7 +64,22 @@ def process_samfile(samfile, contigs, max_edist, rlen=36):
 
     return nhits
 
-def write_to_h5(contig, fout_handle, chunksize=1000000):
+def create_depth_contig(contig, read_len=36):
+    """Takes contig name and uses global matrix_dict to get read start matrix.
+    Uses that to create and return read depth matrix.
+    """
+    depth_count = np.zeros(shape=matrix_dict[contig].shape)
+
+    # Matrix is contig_length x nedists
+
+    for i in range(matrix_dict[contig].shape[0] - read_len):
+        for j in range(matrix_dict[contig].shape[1]):
+            if matrix_dict[contig][i, j] != 0:
+                depth_count[i:i+read_len, j] += matrix_dict[contig][i, j]
+
+    return depth_count
+
+def write_to_h5(contig, depth_contig, fout_handle, chunksize=1000000):
     """Write counts (dictionary of contig matrices) to fout hdf5 file
     in increments of chunksize bases. Outfile is in wssd_out_file format.
     """
@@ -72,14 +88,14 @@ def write_to_h5(contig, fout_handle, chunksize=1000000):
     except NoSuchNodeError:
         group = fout_handle.create_group(fout_handle.root, "depthAndStarts_wssd")
     finally:
+        contig_len, edists = matrix_dict[contig].shape
         carray_empty = tables.CArray(group,
                                      contig,
                                      tables.UInt32Atom(),
-                                     matrix[contig].shape,
+                                     (contig_len, edists, 2),
                                      filters=tables.Filters(complevel=1, complib="lzo")
                                     )
 
-        contig_len = matrix[contig].shape[0]
         nchunks = contig_len // chunksize
         if nchunks * chunksize < contig_len:
             nchunks += 1
@@ -89,7 +105,8 @@ def write_to_h5(contig, fout_handle, chunksize=1000000):
             e = s + chunksize
             if e > contig_len:
                 e = contig_len
-            carray_empty[s:e, :, :] = matrix[contig][s:e, :, :]
+            carray_empty[s:e, :, 0] = depth_contig[s:e, :]
+            carray_empty[s:e, :, 1] = matrix_dict[contig][s:e, :]
 
         fout_handle.flush()
 
@@ -108,6 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("--read_length", default=36, type=int,
                         help="Length of input reads (default: %(default)s)")
     parser.add_argument("--log", default=sys.stderr, help="Path to log file. Default: sys.stderr")
+    parser.add_argument("--cython", action="store_true", help="Use cython code for depth array")
 
     args = parser.parse_args()
 
@@ -131,8 +149,14 @@ if __name__ == "__main__":
     
     with tables.open_file(args.outfile, mode="w") as h5file:
         for contig in args.contigs:
-            write_to_h5(args.contig, h5file)
-            del matrix[contig]
+            if args.cython:
+                depth_contig = np.zeros(shape=matrix_dict[contig].shape, dtype=np.uint32)
+                create_depth_array.create_depth_array(matrix_dict[contig], depth_contig)
+            else:
+                depth_contig = create_depth_contig(contig)
+            write_to_h5(contig, depth_contig, h5file)
+            del matrix_dict[contig]
+            del depth_contig
 
     run_end = time.time()
     total_runtime = run_end - run_start
