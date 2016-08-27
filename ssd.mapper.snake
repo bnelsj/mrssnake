@@ -76,12 +76,15 @@ rule map:
     run:
         mem = float(MEM.rstrip("GgMm"))
         MRSFAST_MEM = int(mem * 0.6) # Rough correction for mrsfast mem overuse
+        FIFO = "{wildcards.sample}.fifo"
         print("Mrsfast will be given {} mem out of {} total".format(MRSFAST_MEM, mem))
         masked_ref_name = os.path.basename(MASKED_REF)
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
+        shell("mkfifo {FIFO}")
         shell("{SNAKEMAKE_DIR}/bin/bam_chunker_parallel -b {input.bam} -i {input.index} -t {CORES} 2>> /dev/stderr | \
               mrsfast --search {mrsfast_ref_path} -n 0 -e {MAX_EDIST} --crop 36 --seq /dev/stdin \
-              -o {output[0]} --disable-nohit --threads {CORES} --mem {MRSFAST_MEM}")
+              -o {FIFO} --disable-nohit --threads {CORES} --mem {MRSFAST_MEM} | \
+              python3 {SNAKEMAKE_DIR}/read_counter_parallel.py {FIFO} hits/{wildcards.sample} --contigs_file {CONTIGS_FILE} --threads {CORES}")
 
 rule rsync:
     input: lambda wildcards: SAMPLES.loc[SAMPLES.sn == wildcards.sample, "bam"],
