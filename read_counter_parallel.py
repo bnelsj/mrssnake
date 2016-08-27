@@ -12,19 +12,14 @@ from __future__ import division
 import os, sys
 import argparse
 
-from functools import total_ordering
 import time
 
 import re
 
-import tables
-import numpy as np
 import pandas as pd
-from tables import NoSuchNodeError
 
 import multiprocessing
 import signal
-import create_depth_array
 
 def process_block(block, contig_hits, regex_full, nhits):
     for (contig, pos, edist) in regex_full.findall(block):
