@@ -47,13 +47,15 @@ def add_to_array(array, pos, edist, rlen=36):
     end = pos + rlen
     array[pos, edist] += 1
 
-def process_samfile(samfile, contigs, max_edist, rlen=36):
+def process_file(infile, contigs, max_edist, rlen=36, mode="tab"):
     contigs_string = "|".join(contigs)
-    regex_full = re.compile("[^ @\t]+\t[0-9]+\t(%s)\t([0-9]+)\t.+NM:i:([0-9]+)" % contigs_string)
+    if mode == "tab":
+        regex_full = re.compile("^({})\t([0-9]+)\t([0-9]+)".format(contigs_string))
+    else:
+        regex_full = re.compile("[^ @\t]+\t[0-9]+\t(%s)\t([0-9]+)\t.+NM:i:([0-9]+)" % contigs_string)
     nhits = {contig: 0 for contig in contigs}
-
-    with open(samfile, "r") as sam:
-        for line in sam:
+    with open(infile, "r") as handle:
+        for line in handle:
             match = regex_full.match(line)
             if match is not None:
                 contig, pos, edist = match.group(1,2,3)
@@ -112,11 +114,13 @@ def write_to_h5(contig, depth_contig, fout_handle, chunksize=1000000):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("samfile", help="Sam-format input file")
+    parser.add_argument("infile", help="Input file (sam or chr,pos,edist tab format)")
     parser.add_argument("outfile", help="HDF5 file with read depths and starts")
     parser.add_argument("contigs", nargs="+", help="Names of contigs")
     parser.add_argument("--contigs_file", required=True,
                         help="tab-delimited file with contig names and lengths")
+    parser.add_argument("--mode", choices=["tab", "sam"], default="tab",
+                        help="Input file format (Default: %(default)s)")
     parser.add_argument("--max_edist",
                         default=2,
                         type=int,
@@ -125,7 +129,6 @@ if __name__ == "__main__":
     parser.add_argument("--read_length", default=36, type=int,
                         help="Length of input reads (default: %(default)s)")
     parser.add_argument("--log", default=sys.stderr, help="Path to log file. Default: sys.stderr")
-    parser.add_argument("--cython", action="store_true", help="Use cython code for depth array")
 
     args = parser.parse_args()
 
@@ -138,7 +141,7 @@ if __name__ == "__main__":
 
     create_array(args.contigs, args.contigs_file, args.max_edist)
 
-    nhits = process_samfile(args.samfile, args.contigs, args.max_edist)
+    nhits = process_file(args.infile, args.contigs, args.max_edist, args.mode)
 
     mp_end = time.time() - run_start
 
@@ -149,11 +152,8 @@ if __name__ == "__main__":
     
     with tables.open_file(args.outfile, mode="w") as h5file:
         for contig in args.contigs:
-            if args.cython:
-                depth_contig = np.zeros(shape=matrix_dict[contig].shape, dtype=np.uint32)
-                create_depth_array.create_depth_array(matrix_dict[contig], depth_contig)
-            else:
-                depth_contig = create_depth_contig(contig)
+            depth_contig = np.zeros(shape=matrix_dict[contig].shape, dtype=np.uint32)
+            create_depth_array.create_depth_array(matrix_dict[contig], depth_contig)
             write_to_h5(contig, depth_contig, h5file)
             del matrix_dict[contig]
             del depth_contig

@@ -59,16 +59,16 @@ rule wssd_merge:
         shell("rsync {tempfile} {output}")
 
 rule count:
-    input: "{sample}.mrsfast.sam"
+    input: "hits/{sample}.tab"
     output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
     resources: cores=1, mem=6
     benchmark: "benchmarks/count/{sample}.{contig}.txt"
     shell:
-        "python3 {SNAKEMAKE_DIR}/read_counter_from_sam.py {input} {output} {wildcards.contig} --contigs_file {CONTIGS_FILE}"
+        "python3 {SNAKEMAKE_DIR}/read_counter_from_file.py {input} {output} {wildcards.contig} --contigs_file {CONTIGS_FILE}"
 
 rule map:
     input: bam = "bam/{sample}.bam", index = "bam/{sample}.bai"
-    output: "{sample}.mrsfast.sam"
+    output: "hits/{sample}.tab"
     params: sge_opts = ""
     benchmark: "%s/benchmarks/counter/{sample}/{sample}.txt" % SNAKEMAKE_DIR
     priority: 20
@@ -76,15 +76,15 @@ rule map:
     run:
         mem = float(MEM.rstrip("GgMm"))
         MRSFAST_MEM = int(mem * 0.6) # Rough correction for mrsfast mem overuse
-        FIFO = "{wildcards.sample}.fifo"
+        FIFO = "%s.fifo" % wildcards.sample
         print("Mrsfast will be given {} mem out of {} total".format(MRSFAST_MEM, mem))
         masked_ref_name = os.path.basename(MASKED_REF)
         mrsfast_ref_path = "/var/tmp/mrsfast_index/%s" % masked_ref_name
         shell("mkfifo {FIFO}")
-        shell("{SNAKEMAKE_DIR}/bin/bam_chunker_parallel -b {input.bam} -i {input.index} -t {CORES} 2>> /dev/stderr | \
+        shell("""{SNAKEMAKE_DIR}/bin/bam_chunker_parallel -b {input.bam} -i {input.index} -t {CORES} 2>> /dev/stderr | \
               mrsfast --search {mrsfast_ref_path} -n 0 -e {MAX_EDIST} --crop 36 --seq /dev/stdin \
               -o {FIFO} --disable-nohit --threads {CORES} --mem {MRSFAST_MEM} | \
-              python3 {SNAKEMAKE_DIR}/read_counter_parallel.py {FIFO} hits/{wildcards.sample} --contigs_file {CONTIGS_FILE} --threads {CORES}")
+             grep -v "^@" {FIFO} | awk 'OFS="\t" {{ed=substr($12,6); print $3,$4,ed}}' > {output}""") 
 
 rule rsync:
     input: lambda wildcards: SAMPLES.loc[SAMPLES.sn == wildcards.sample, "bam"],

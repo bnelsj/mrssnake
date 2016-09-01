@@ -2,8 +2,10 @@
 # cython: boundscheck=False
 # cython: wraparound=False
 """
-Convert mrsfast sam output to matrix of read depth and read start depth values.
-Uses sparse matrices to reduce memory footprint.
+Warning: this code is not functional. Python multiprocessing with a single input string 
+is a dark road to go down.
+
+This script was intended to convert mrsfast sam output to a tab-delimited file per contig and core.
 """
 
 from __future__ import print_function
@@ -15,10 +17,12 @@ import argparse
 import time
 
 import re
+import pdb
 
 import pandas as pd
 
 import multiprocessing
+from multiprocessing.managers import SyncManager
 import signal
 
 def process_block(block, contig_hits, regex_full, nhits):
@@ -33,7 +37,7 @@ def get_contig_dict(contigs, of_prefix, proc_num):
     contig_hits = {}
     for contig in contigs:
         contig_hits[contig] = []
-        contig_dict[contig] = open("{}.{}.{}.txt".format(of_prefix, contig, proc_num), "w")
+        contig_dict[contig] = open("{}.{}.{}.txt".format(of_prefix, proc_num, contig), "w")
     return contig_dict, contig_hits
 
 def write_output(contig_handles, contig_hits):
@@ -50,7 +54,7 @@ def close_contig_handles(contig_handles):
     for contig in contig_handles.keys():
         contig_handles[contig].close()
 
-def worker(contigs, of_prefix, proc_num, block_size=1024*1024):
+def worker(contigs, of_prefix, proc_num, tb, block_size=1024*1024):
     contig_handles, contig_hits = get_contig_dict(contigs, of_prefix, proc_num)
     contigs_string = "|".join(contigs)
     regex_full = re.compile("[^ @\t]+\t[0-9]+\t(%s)\t([0-9]+)\t.+NM:i:([0-9]+)" % contigs_string)
@@ -59,11 +63,28 @@ def worker(contigs, of_prefix, proc_num, block_size=1024*1024):
 
     dat = None
 
+    #worker_blocks = 0
+
     while dat != "":
-        lock.acquire()
-        dat = sam_handle.read(block_size)
-        dat += sam_handle.readline()
-        lock.release()
+        with global_lock:
+            #print(proc_num, " pre:", sam_handle.tell())
+            dat = sam_handle.read(block_size)
+            counter = 0
+            #total_blocks += 1
+            while not dat.endswith("\n") and dat != "":
+                line = ""
+                line = sam_handle.readline()
+                dat += line
+
+                #print(line, proc_num, sam_handle.tell(), worker_blocks)
+                counter +=1
+                if counter > 10:
+                    #print("Process {} sleeping...".format(proc_num))
+                    print(dat.split("\n")[-5:-1])
+                    print(len(line), line)
+                    print(total_blocks)
+                    #break
+            #print(proc_num, "post:", sam_handle.tell())
 
         contig_hits, nhits = process_block(dat, contig_hits, regex_full, nhits)
         write_output(contig_handles, contig_hits)
@@ -75,11 +96,13 @@ def worker(contigs, of_prefix, proc_num, block_size=1024*1024):
     return proc_num
 
 
-def setup(sh, l):
+def setup(sh, l, tb):
     global sam_handle
-    global lock
+    global global_lock
+    global total_blocks
     sam_handle = sh
-    lock = l
+    global_lock = l
+    total_blocks = 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -93,6 +116,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    sys.exit("This code is not functional and should not be used.")
+
     run_start = time.time()
 
     if args.log is not sys.stderr:
@@ -105,7 +130,10 @@ if __name__ == "__main__":
     l = multiprocessing.Lock()
     sh = open(args.samfile, mode="r")
 
-    setup(sh, l)
+    manager = multiprocessing.Manager()
+    #lock = manager.Lock()
+    tb = 0
+    setup(sh, l, tb)
     threads = []
 
     # Save reference to original SIGINT signal
@@ -116,11 +144,11 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     dirname = os.path.dirname(args.of_prefix)
-    if not os.path.exists(dirname):
+    if dirname != "" and not os.path.exists(dirname):
         os.makedirs(dirname)
 
     for i in range(args.threads):
-        p = multiprocessing.Process(target=worker, args=(contigs, args.of_prefix, i, args.block_size))
+        p = multiprocessing.Process(target=worker, args=(contigs, args.of_prefix, i, total_blocks, args.block_size))
         threads.append(p)
         p.start()
 
