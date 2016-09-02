@@ -1,8 +1,4 @@
 import os
-import sys
-import pysam
-from subprocess import CalledProcessError
-
 import pandas as pd
 
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
@@ -16,6 +12,7 @@ MANIFEST = config["manifest"]
 REFERENCE = config["reference"]
 MASKED_REF = config[REFERENCE]["masked_ref"]
 CONTIGS_FILE = config[REFERENCE]["contigs"]
+RSYNC_BW_LIMIT = config["rsync_bw_limit"]
 
 CORES = config["cores"]
 MEM = config["mem"]
@@ -37,9 +34,6 @@ with open(CONTIGS_FILE, "r") as reader:
 SAMPLES = pd.read_table(MANIFEST)
 SAMPLES.index = SAMPLES.sn
 
-def get_sparse_matrices_from_sample(wildcards):
-    return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
-
 localrules: all, get_headers, make_jobfile
 
 rule all:
@@ -48,7 +42,7 @@ rule all:
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys())
     output: "{SNAKEMAKE_DIR}/mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts="-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_wssd -l h_rt=5:00:00 -soft -l gpfsstate=0"
+    params: sge_opts=""
     log: "log/wssd_merge/{sample}.txt"
     resources: mem=8
     priority: 40
@@ -96,6 +90,6 @@ rule rsync:
     run:
         bam = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"].values[0]
         bai = SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"].values[0]
-        shell("rsync {input[1]} {output[1]} --bwlimit=100000")
-        shell("rsync {input[0]} {output[0]} --bwlimit=200000")
-        shell("mkdir -p /var/tmp/mrsfast_index; rsync {MASKED_REF}.index /var/tmp/mrsfast_index/ --copy-links -p --bwlimit=10000") 
+        shell("rsync {input[1]} {output[1]} --bwlimit={RSYNC_BW_LIMIT}")
+        shell("rsync {input[0]} {output[0]} --bwlimit={RSYNC_BW_LIMIT}")
+        shell("mkdir -p /var/tmp/mrsfast_index; rsync {MASKED_REF}.index /var/tmp/mrsfast_index/ --copy-links -p --bwlimit={RSYNC_BW_LIMIT}") 
