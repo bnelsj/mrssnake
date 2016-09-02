@@ -1,6 +1,6 @@
 ---
 reference: hg19
-manifest: manifest.txt
+manifest: /net/eichler/vol5/home/bnelsj/src/snakemake_rd_mapper/manifest.txt
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked
@@ -29,5 +29,6 @@ max_edist: 2
 max_bp_in_mem: 300000000
 
 # Set amazon to True if running on an EC2 instance
+rsync_bw_limit: 100000
 tmpdir: $TMPDIR
 clean_temp_files: False
