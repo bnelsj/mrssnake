@@ -1,6 +1,6 @@
 ---
-reference: hg19
-manifest: /net/eichler/vol5/home/bnelsj/src/snakemake_rd_mapper/manifest.txt
+reference: hg38
+manifest: manifest.txt
 
 hg19_aws:
     masked_ref: /home/ec2-user/reference/hg19_masked

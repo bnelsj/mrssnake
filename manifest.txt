@@ -1,4 +1,12 @@
 sn	source	bam	index
-AFR_BantuKenya_HGDP01414_F	local	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/AFR_BantuKenya_HGDP01414_F.bam	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/AFR_BantuKenya_HGDP01414_F.bam.bai
-OCN_Bougainville_HGDP00656_F	local	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/OCN_Bougainville_HGDP00656_F.bam	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/OCN_Bougainville_HGDP00656_F.bam.bai
-WEA_FinlandFIN_HG00360_M	local	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/WEA_FinlandFIN_HG00360_M.bam	/net/eichler/vol23/projects/human_diversity/nobackups/C_team_bams_nodups/WEA_FinlandFIN_HG00360_M.bam.bai
+HG00512	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00512.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00512.bam.bai
+HG00513	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00513.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00513.bam.bai
+HG00514	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00514.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00514.bam.bai
+HG00731	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00731.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00731.bam.bai
+HG00732	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00732.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00732.bam.bai
+HG00733	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00733.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/HG00733.bam.bai
+NA19238	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19238.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19238.bam.bai
+NA19239	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19239.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19239.bam.bai
+NA19240	local	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19240.bam	/net/eichler/vol24/projects/structural_variation/nobackups/bams/final/NA19240.bam.bai
+
+
