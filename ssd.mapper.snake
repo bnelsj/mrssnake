@@ -31,13 +31,15 @@ with open(CONTIGS_FILE, "r") as reader:
         contig, size = line.rstrip().split()
         CONTIGS[contig] = int(size)
 
+SAMPLE = config["sample"]
+
 SAMPLES = pd.read_table(MANIFEST)
 SAMPLES.index = SAMPLES.sn
 
 localrules: all, get_headers, make_jobfile
 
 rule all:
-    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % SNAKEMAKE_DIR, sample = SAMPLES.sn)
+    input:  expand("%s/mapping/{sample}/{sample}/wssd_out_file" % SNAKEMAKE_DIR, sample = SAMPLE)
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys())

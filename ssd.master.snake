@@ -46,7 +46,7 @@ rule all:
 rule map_sample:
     input: bam = lambda wc: SAMPLES.ix[SAMPLES.sn == wc.sample, "bam"], index = lambda wc: SAMPLES.ix[SAMPLES.sn == wc.sample, "index"]
     output: "mapping/{sample}/{sample}/wssd_out_file"
-    params: sge_opts = "-pe serial 18-36 -l mfree=6G -l h_rt=24:0:0 -l ssd=TRUE -l data_scratch_ssd_disk_free=300G -R y"
+    params: sge_opts = "-pe serial 12-36 -l mfree=6G -l h_rt=24:0:0 -l ssd=TRUE -l disk_free=300G -R y"
     benchmark: "benchmarks/wssd_out/{sample}.txt"
     run:
         import getpass
@@ -55,7 +55,8 @@ rule map_sample:
         #try:
         #    TEMPDIR = os.environ["TMPDIR"]
         #except KeyError:
-        TEMPDIR = "/data/scratch/ssd/%s" % getpass.getuser()
+        #TEMPDIR = "/data/scratch/ssd/%s" % getpass.getuser()
+        TEMPDIR = "$TMPDIR"
         if not os.path.exists(TEMPDIR):
             os.makedirs(TEMPDIR)
         cwd = os.getcwd()
