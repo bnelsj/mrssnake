@@ -89,10 +89,10 @@ rule merge_sparse_matrices:
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade"
     output: "region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS)
-    params: sge_opts = "-l mfree=6G -N map_count -l h_rt=2:00:00 -soft -l gpfsstate=0"
+    params: sge_opts = "-l mfree=10G -N map_count -l h_rt=10:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     priority: 20
-    resources: mem=6
+    resources: mem=10
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
