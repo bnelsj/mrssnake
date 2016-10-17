@@ -52,11 +52,8 @@ rule map_sample:
         import getpass
         cores = os.environ["NSLOTS"]
         mem = os.environ["SGE_HGR_m_mem_free"]
-        #try:
-        #    TEMPDIR = os.environ["TMPDIR"]
-        #except KeyError:
-        #TEMPDIR = "/data/scratch/ssd/%s" % getpass.getuser()
-        TEMPDIR = "$TMPDIR"
+        TEMPDIR = os.environ["TMPDIR"]
+
         if not os.path.exists(TEMPDIR):
             os.makedirs(TEMPDIR)
         cwd = os.getcwd()
