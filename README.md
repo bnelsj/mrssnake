@@ -1,3 +1,5 @@
+[![Snakemake](https://img.shields.io/badge/snakemake-≥3.5.4-brightgreen.svg?style=flat-square)](http://snakemake.bitbucket.org)
+
 # mrssnake
 Simple mrsfast read depth mapping using snakemake
 
