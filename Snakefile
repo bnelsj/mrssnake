@@ -45,7 +45,7 @@ SAMPLES.index = SAMPLES.sn
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
-localrules: all, get_headers, make_jobfile, clean
+localrules: all, get_headers, make_jobfile, clean, make_chunker
 
 rule all:
     input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
@@ -88,11 +88,11 @@ rule merge_sparse_matrices:
 
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade"
-    output: "region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS)
+    output: temp("region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS))
     params: sge_opts = "-l mfree=10G -N map_count -l h_rt=10:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
-    priority: 20
     resources: mem=10
+    priority: 20
     log: "log/map/{sample}/{part}_%s.txt" % BAM_PARTITIONS
     run:
         masked_ref_name = os.path.basename(MASKED_REF)
