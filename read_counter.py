@@ -372,7 +372,7 @@ if __name__ == "__main__":
 
     with open(args.contig_lengths, "r") as reader:
         for line in reader:
-            contig, length = line.rstrip().split()
+            contig, length = line.rstrip().split()[0:2]
             contigs[contig] = int(length)
 
     numpy_contigs = get_array_contigs(contigs, args)
