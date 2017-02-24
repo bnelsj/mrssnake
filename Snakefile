@@ -36,7 +36,7 @@ CONTIGS = {}
 
 with open(CONTIGS_FILE, "r") as reader:
     for line in reader:
-        contig, size = line.rstrip().split()
+        contig, size = line.rstrip().split()[0:2]
         CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
@@ -87,7 +87,7 @@ rule merge_sparse_matrices:
         shell("rsync {tempfile} {output}")
 
 rule map_and_count:
-    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"], chunker = "bin/bam_chunker_cascade"
+    input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]
     output: temp("region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS))
     params: sge_opts = "-l mfree=10G -N map_count -l h_rt=10:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
@@ -110,7 +110,7 @@ rule map_and_count:
 
         read_counter_args = "--max_basepairs_in_mem %d --max_edist %s" % (MAX_BP, MAX_EDIST)
         shell("hostname; echo part: {wildcards.part} nparts: {BAM_PARTITIONS} unmapped parts: {UNMAPPED_PARTITIONS}; mkfifo {fifo}; {rsync_opts}")
-        shell("{input.chunker} -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
+        shell("bin/bam_chunker_cascade -b {input.bam} -i {local_index} -p {wildcards.part} -n {BAM_PARTITIONS} -u {UNMAPPED_PARTITIONS} 2>> /dev/stderr | "
             "mrsfast --search {mrsfast_ref_path} -n 0 -e {MAX_EDIST} --crop 36 --seq /dev/stdin -o {fifo} --disable-nohit >> /dev/stderr | "
             "python3 read_counter.py {fifo} {output} {CONTIGS_FILE} {read_counter_args}"
             )
