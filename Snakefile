@@ -10,8 +10,7 @@ SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
 shell.executable("/bin/bash")
 shell.prefix("source %s/config.sh; set -euo pipefail; " % SNAKEMAKE_DIR)
 
-if config == {}:
-    configfile: "config.yaml"
+configfile: "config.yaml"
 
 MANIFEST = config["manifest"]
 REFERENCE = config["reference"]
@@ -33,11 +32,13 @@ if not os.path.exists("log"):
     os.makedirs("log")
 
 CONTIGS = {}
+EXCLUDE = config.get("exclude", [])
 
 with open(CONTIGS_FILE, "r") as reader:
     for line in reader:
         contig, size = line.rstrip().split()[0:2]
-        CONTIGS[contig] = int(size)
+        if contig not in EXCLUDE:
+            CONTIGS[contig] = int(size)
 
 SAMPLES = pd.read_table(MANIFEST)
 SAMPLES.index = SAMPLES.sn
@@ -45,18 +46,10 @@ SAMPLES.index = SAMPLES.sn
 def get_sparse_matrices_from_sample(wildcards):
     return ["region_matrices/%s/%s.%d_%d" % (wildcards.sample, wildcards.sample, part, BAM_PARTITIONS) for part in range(BAM_PARTITIONS + UNMAPPED_PARTITIONS)]
 
-localrules: all, get_headers, make_jobfile, clean, make_chunker
+localrules: all, get_headers, make_jobfile, clean, make_chunker, aggregate_mappings
 
 rule all:
-    input:  expand("finished/{sample}.txt", sample = SAMPLES.sn)
-
-rule clean:
-    input: "mapping/{sample}/{sample}/wssd_out_file"
-    output: touch("finished/{sample}.txt")
-    priority: 50
-    run:
-        if CLEAN_TEMP_FILES:
-            shell("rm region_matrices/{wildcards.sample}/*")
+    input:  expand("mapping/{sample}/{sample}/wssd_out_file", sample = SAMPLES.sn)
 
 rule wssd_merge:
     input: wssd = expand("mapping/{{sample}}/{{sample}}/wssd_out_file.{contig}", contig = CONTIGS.keys()),
@@ -68,27 +61,32 @@ rule wssd_merge:
     priority: 40
     benchmark: "benchmarks/wssd_merge/{sample}.txt"
     run:
+        infiles = "mapping/{0}/{0}/wssd_out_file.*".format(wildcards.sample)
         tempfile = "%s/%s.wssd_out_file" % (TMPDIR, wildcards.sample)
-        shell("python3 merger.py {tempfile} --infiles {input.wssd} --wssd_merge --contigs_file {CONTIGS_FILE}")
+        shell("python3 merger.py {tempfile} --infiles {infiles} --wssd_merge --contigs_file {CONTIGS_FILE}")
         shell("rsync {tempfile} {output}")
 
 rule merge_sparse_matrices:
-    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
-    output: temp("mapping/{sample}/{sample}/wssd_out_file.{contig}")
+    input: "finished/mapping/{sample}"
+    output: "mapping/{sample}/{sample}/wssd_out_file.{contig}"
     params: sge_opts = "-l mfree=8G -l disk_free=10G -pe serial 1 -N merge_sample -l h_rt=5:00:00 -soft -l gpfsstate=0"
     log: "log/merge/{sample}.{contig}.txt"
     resources: mem=8
     priority: 30
     benchmark: "benchmarks/merge/{sample}.{contig}.txt"
     run:
-        infile_glob = os.path.commonprefix(input) + "*"
+        infile_glob = "region_matrices/{0}/{0}.*_*.h5".format(wildcards.sample)
         tempfile = "%s/%s.wssd_out_file.%s" % (TMPDIR, wildcards.sample, wildcards.contig)
         shell('python3 merger.py {tempfile} --infile_glob "{infile_glob}" --contig {wildcards.contig}')
         shell("rsync {tempfile} {output}")
 
+rule aggregate_mappings:
+    input: expand("region_matrices/{{sample}}/{{sample}}.{part}_%d.h5" % BAM_PARTITIONS, part = range(BAM_PARTITIONS + UNMAPPED_PARTITIONS))
+    output: touch("finished/mapping/{sample}")
+
 rule map_and_count:
     input: bam = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "bam"], index = lambda wildcards: SAMPLES.ix[SAMPLES.sn == wildcards.sample, "index"]
-    output: temp("region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS))
+    output: "region_matrices/{sample}/{sample}.{part}_%d.h5" % (BAM_PARTITIONS)
     params: sge_opts = "-l mfree=10G -N map_count -l h_rt=10:00:00 -soft -l gpfsstate=0"
     benchmark: "benchmarks/counter/{sample}/{sample}.{part}.%d.txt" % BAM_PARTITIONS
     resources: mem=10
